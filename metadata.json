@@ -1,0 +1,6 @@
+{
+  "name": "MISHKAAT — Islamic Knowledge & Media Platform",
+  "description": "An authentic Islamic digital platform featuring scholarly speeches of Ahl-e-Sunnat, Islamic reels, digital library of books, articles, aqwaal, and shayariyan with a secure management portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

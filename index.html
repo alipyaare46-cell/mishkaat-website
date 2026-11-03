@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    
+    <!-- Primary SEO Meta Tags -->
+    <title>MISHKAAT — Islamic Knowledge & Media Platform</title>
+    <meta name="description" content="Sanctuary of Ahl-e-Sunnat knowledge, verified speeches, Islamic reels, digital library of books, research articles, aqwaal, and devotional verse. Powered by Syed Ali Qalandar Peerzade." />
+    <meta name="keywords" content="Mishkaat, ahl-e-sunnat, sunni platform, islamic speeches, taqreer, islamic reels, sunni books, kanz ul iman, noor ul irfan, islamic videos, islamic quotes, syed ali qalandar peerzade" />
+    <meta name="author" content="Syed Ali Qalandar Peerzade" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/" />
+
+    <!-- PWA & Mobile Web App Meta -->
+    <meta name="theme-color" content="#064E3B" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mishkaat" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- OpenGraph Social Cards (Facebook, WhatsApp, LinkedIn, Discord) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/" />
+    <meta property="og:site_name" content="MISHKAAT" />
+    <meta property="og:title" content="MISHKAAT — Islamic Knowledge & Media Platform" />
+    <meta property="og:description" content="Sanctuary of Ahl-e-Sunnat knowledge, verified speeches, Islamic reels, digital library of books, research articles, aqwaal, and devotional verse." />
+    <meta property="og:image" content="https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/" />
+    <meta name="twitter:title" content="MISHKAAT — Islamic Knowledge & Media Platform" />
+    <meta name="twitter:description" content="Sanctuary of Ahl-e-Sunnat knowledge, verified speeches, Islamic reels, digital library of books, and sacred literature." />
+    <meta name="twitter:image" content="https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/icon-512.png" />
+
+    <!-- Web Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Schema.org JSON-LD Structured Data for Google Search -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "name": "MISHKAAT",
+          "alternateName": "مشکوٰۃ",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "All",
+          "url": "https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/",
+          "description": "Authentic Ahl-e-Sunnat Islamic knowledge, scholarly speeches, digital library of books, Islamic reels, research articles, and spiritual poetry.",
+          "author": {
+            "@type": "Person",
+            "name": "Syed Ali Qalandar Peerzade"
+          },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "name": "MISHKAAT Platform",
+          "url": "https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://ais-pre-m43xgwvyihjrwujfchzmif-988097755442.asia-east1.run.app/#search?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body class="bg-[#F4F8F4] text-[#202820] antialiased selection:bg-[#D4AF37]/30 selection:text-[#064E3B]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- PWA Service Worker Registration & Seamless Auto-Update Logic -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              // Check for updates every 30 seconds automatically
+              setInterval(() => {
+                registration.update().catch(() => {});
+              }, 30000);
+
+              // Check for updates when user switches back to tab or launches installed app
+              document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                  registration.update().catch(() => {});
+                }
+              });
+
+              // Listen for new service worker installation
+              registration.onupdatefound = () => {
+                const installingWorker = registration.installing;
+                if (installingWorker) {
+                  installingWorker.onstatechange = () => {
+                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // Automatically notify the new service worker to activate and reload
+                      installingWorker.postMessage({ action: 'skipWaiting' });
+                    }
+                  };
+                }
+              };
+            })
+            .catch((err) => {
+              console.warn('SW registration skipped in preview:', err);
+            });
+
+          // Reload smoothly when new version takes control
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

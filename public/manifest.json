@@ -1,0 +1,56 @@
+{
+  "id": "/",
+  "name": "MISHKAAT — Islamic Knowledge & Media Platform",
+  "short_name": "Mishkaat",
+  "description": "Authentic Islamic scholarship, speeches of Ahl-e-Sunnat, digital library of books, Islamic reels, research articles, aqwaal, and devotional verse.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#064E3B",
+  "theme_color": "#064E3B",
+  "categories": ["education", "books", "entertainment"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Videos & Speeches",
+      "short_name": "Speeches",
+      "description": "Listen to authentic Ahl-e-Sunnat speeches",
+      "url": "/#speeches",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Islamic Reels",
+      "short_name": "Reels",
+      "description": "Watch spiritual 9:16 short reels",
+      "url": "/#reels",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Digital Books",
+      "short_name": "Books",
+      "description": "Read sacred books online",
+      "url": "/#books",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
