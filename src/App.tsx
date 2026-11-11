@@ -38,13 +38,61 @@ import { ContactPage } from './pages/ContactPage';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminLayout } from './pages/admin/AdminLayout';
 
+// Helpers for clean URL path-based routing & browser history
+function getRouteFromPath(): { route: string; param: string | null } {
+  if (typeof window === 'undefined') return { route: 'home', param: null };
+
+  let rawPath = window.location.pathname.toLowerCase().replace(/^\/+|\/+$/g, '');
+  if (!rawPath && window.location.hash) {
+    rawPath = window.location.hash.replace(/^#\/?/, '').toLowerCase().replace(/^\/+|\/+$/g, '');
+  }
+
+  if (!rawPath) return { route: 'home', param: null };
+
+  const parts = rawPath.split('/');
+  const segment1 = parts[0];
+  const param = parts[1] ? decodeURIComponent(parts[1]) : null;
+
+  if (segment1 === 'scholar') {
+    return { route: 'scholar', param };
+  }
+  if (segment1 === 'article' || segment1 === 'articles') {
+    return { route: 'articles', param };
+  }
+  if (['home', 'speeches', 'reels', 'books', 'articles', 'aqwaal', 'shayariyan', 'contact', 'admin'].includes(segment1)) {
+    return { route: segment1, param };
+  }
+
+  return { route: 'home', param: null };
+}
+
+function getPathFromRoute(route: string, param?: string | null): string {
+  if (route === 'home') return '/';
+  if (route === 'scholar' && param) return `/scholar/${encodeURIComponent(param)}`;
+  if (route === 'articles') {
+    return param ? `/articles/${encodeURIComponent(param)}` : '/articles';
+  }
+  if (route === 'article' && param) {
+    return `/articles/${encodeURIComponent(param)}`;
+  }
+  return `/${route}`;
+}
+
 function MainApp() {
   const { admin, isLoading: authLoading } = useAuth();
   
-  // Navigation
-  const [currentRoute, setCurrentRoute] = useState<string>('home');
-  const [selectedScholarSlug, setSelectedScholarSlug] = useState<string | null>(null);
-  const [selectedArticleSlug, setSelectedArticleSlug] = useState<string | null>(null);
+  // Navigation states initialized from the current browser URL
+  const [currentRoute, setCurrentRoute] = useState<string>(
+    () => getRouteFromPath().route
+  );
+
+  const [selectedScholarSlug, setSelectedScholarSlug] = useState<string | null>(
+    () => (getRouteFromPath().route === 'scholar' ? getRouteFromPath().param : null)
+  );
+
+  const [selectedArticleSlug, setSelectedArticleSlug] = useState<string | null>(
+    () => (getRouteFromPath().route === 'articles' ? getRouteFromPath().param : null)
+  );
 
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -116,24 +164,50 @@ function MainApp() {
     }
   }, [admin]);
 
+  // Initial load
   useEffect(() => {
     fetchAllData();
-  }, [currentRoute, fetchAllData]);
+  }, [fetchAllData]);
 
-  // Handle URL hash changes or internal navigation
-  const navigate = (route: string, param?: string) => {
-    if (route === 'scholar' && param) {
-      setSelectedScholarSlug(param);
-    } else if (route === 'article' && param) {
-      setSelectedArticleSlug(param);
-      setCurrentRoute('articles');
+  // Handle browser Back and Forward navigation buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const routeInfo = getRouteFromPath();
+      setCurrentRoute(routeInfo.route);
+      setSelectedScholarSlug(routeInfo.route === 'scholar' ? routeInfo.param : null);
+      setSelectedArticleSlug(routeInfo.route === 'articles' ? routeInfo.param : null);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      fetchAllData();
-      return;
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // Handle URL navigation with history pushState
+  const navigate = (route: string, param?: string) => {
+    const nextRoute = route === 'article' ? 'articles' : route;
+
+    if (nextRoute === 'scholar') {
+      setSelectedScholarSlug(param || null);
+    } else {
+      setSelectedScholarSlug(null);
     }
-    setCurrentRoute(route);
+
+    if (nextRoute === 'articles') {
+      setSelectedArticleSlug(param || null);
+    } else {
+      setSelectedArticleSlug(null);
+    }
+
+    const nextPath = getPathFromRoute(nextRoute, param);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+
+    setCurrentRoute(nextRoute);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    fetchAllData();
   };
 
   const handleSearchResult = (type: string, idOrSlug: string) => {
@@ -150,7 +224,7 @@ function MainApp() {
       const b = books.find((bk) => bk.id === idOrSlug);
       if (b) setActiveBook(b);
     } else if (type === 'article') {
-      navigate('article', idOrSlug);
+      navigate('articles', idOrSlug);
     } else if (type === 'aqwaal') {
       navigate('aqwaal');
     } else if (type === 'shayariyan') {
@@ -195,10 +269,7 @@ function MainApp() {
         onPreviewSpeech={(s) => setActiveSpeech(s)}
         onPreviewReel={(r) => setActiveReel(r)}
         onViewBook={(b) => setActiveBook(b)}
-        onPreviewArticle={(slug) => {
-          setSelectedArticleSlug(slug);
-          navigate('articles');
-        }}
+        onPreviewArticle={(slug) => navigate('articles', slug)}
       />
     );
   }
@@ -230,10 +301,7 @@ function MainApp() {
             onPlaySpeech={(s) => setActiveSpeech(s)}
             onPlayReel={(r) => setActiveReel(r)}
             onViewBook={(b) => setActiveBook(b)}
-            onReadArticle={(slug) => {
-              setSelectedArticleSlug(slug);
-              navigate('articles');
-            }}
+            onReadArticle={(slug) => navigate('articles', slug)}
           />
         )}
 
@@ -268,8 +336,8 @@ function MainApp() {
             articles={articles}
             categories={articleCategories}
             activeArticleSlug={selectedArticleSlug}
-            onSelectArticle={(slug) => setSelectedArticleSlug(slug)}
-            onBackToList={() => setSelectedArticleSlug(null)}
+            onSelectArticle={(slug) => navigate('articles', slug)}
+            onBackToList={() => navigate('articles')}
           />
         )}
 
@@ -303,7 +371,7 @@ function MainApp() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Global Footer */}
       <Footer
         settings={settings}
         navigate={navigate}
@@ -319,17 +387,14 @@ function MainApp() {
       <MediaPlayerModal
         speech={activeSpeech}
         onClose={() => setActiveSpeech(null)}
-        onNavigateScholar={(slug) => navigate('scholar', slug)}
       />
 
       <ReelPlayerModal
         reel={activeReel}
         reels={reels}
-        onSelectReel={(r) => setActiveReel(r)}
         onClose={() => setActiveReel(null)}
-        onNavigateScholar={(slug) => navigate('scholar', slug)}
+        onSelectReel={(r) => setActiveReel(r)}
       />
-
 
       <BookReaderModal
         book={activeBook}
@@ -350,10 +415,7 @@ function MainApp() {
         onPlaySpeech={(s) => setActiveSpeech(s)}
         onPlayReel={(r) => setActiveReel(r)}
         onViewBook={(b) => setActiveBook(b)}
-        onViewArticle={(slug) => {
-          setSelectedArticleSlug(slug);
-          navigate('articles');
-        }}
+        onViewArticle={(slug) => navigate('articles', slug)}
       />
 
       {/* Floating PWA Install & Auto-Update Banner */}

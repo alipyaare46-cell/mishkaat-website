@@ -5,6 +5,11 @@ import { useLanguage, Language } from '../context/LanguageContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { PwaInstallButton } from './PwaInstallButton';
 
+function getPathFromRoute(route: string): string {
+  if (route === 'home') return '/';
+  return `/${route}`;
+}
+
 interface HeaderProps {
   currentRoute: string;
   navigate: (route: string) => void;
@@ -77,20 +82,28 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, navigate, onOpenSe
             {navLinks.map((item) => {
               const isActive = currentRoute === item.route;
               return (
-                <button
-                  key={item.route}
-                  onClick={() => handleNav(item.route)}
-                  className={`relative py-1.5 whitespace-nowrap transition-colors duration-150 cursor-pointer ${
-                    isActive
-                      ? 'text-[#D4AF37] font-semibold'
-                      : 'text-emerald-100 hover:text-white'
-                  }`}
-                >
-                  {item.label}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4AF37] rounded-full" />
-                  )}
-                </button>
+                
+  <a
+  key={item.route}
+  href={getPathFromRoute(item.route)}
+  onClick={(e) => {
+    e.preventDefault();
+    handleNav(item.route);
+  }}
+  className={`relative py-1.5 whitespace-nowrap transition-colors duration-150 cursor-pointer ${
+    isActive
+      ? 'text-[#D4AF37] font-semibold'
+      : 'text-emerald-100 hover:text-white'
+  }`}
+>
+  {item.label}
+  {isActive && (
+    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4AF37] rounded-full" />
+  )}
+</a>
+
+                  
+                
               );
             })}
           </nav>
@@ -252,18 +265,22 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, navigate, onOpenSe
             const Icon = item.icon;
             const isActive = currentRoute === item.route;
             return (
-              <button
-                key={item.route}
-                onClick={() => handleNav(item.route)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                  isActive
-                    ? 'bg-emerald-800/90 text-[#D4AF37] font-semibold'
-                    : 'text-emerald-100 hover:bg-emerald-800/40 hover:text-white'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-300'}`} />
-                <span>{item.label}</span>
-              </button>
+             <a
+  key={item.route}
+  href={getPathFromRoute(item.route)}
+  onClick={(e) => {
+    e.preventDefault();
+    handleNav(item.route);
+  }}
+  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+    isActive
+      ? 'bg-emerald-800/90 text-[#D4AF37] font-semibold'
+      : 'text-emerald-100 hover:bg-emerald-800/40 hover:text-white'
+  }`}
+>
+  <Icon className={`w-4 h-4 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-300'}`} />
+  <span>{item.label}</span>
+</a>
             );
           })}
           
