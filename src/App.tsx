@@ -114,7 +114,45 @@ function MainApp() {
   const [aqwaalCategories, setAqwaalCategories] = useState<AqwaalCategory[]>([]);
   const [shayariyan, setShayariyan] = useState<Shayariyan[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
+useEffect(() => {
+  const pageTitles: Record<string, string> = {
+    home: 'MISHKAAT | Islamic Knowledge & Media Platform',
+    speeches: 'Islamic Speeches | MISHKAAT',
+    reels: 'Islamic Reels | MISHKAAT',
+    books: 'Islamic Books | MISHKAAT',
+    articles: 'Islamic Articles | MISHKAAT',
+    aqwaal: 'Islamic Aqwaal | MISHKAAT',
+    shayariyan: 'Islamic Shayariyan | MISHKAAT',
+    contact: 'Contact Us | MISHKAAT',
+    scholar: 'Islamic Scholars | MISHKAAT',
+    admin: 'Admin Portal | MISHKAAT',
+  };
 
+  document.title = pageTitles[currentRoute] || 'MISHKAAT | Islamic Platform';
+  const descriptions: Record<string, string> = {
+  home: 'Explore authentic Islamic knowledge, speeches, books and articles at MISHKAAT.',
+  speeches: 'Listen to Islamic speeches and beneficial lectures from Ahl-e-Sunnat scholars.',
+  reels: 'Watch Islamic reels and short videos with meaningful Islamic reminders.',
+  books: 'Explore Islamic books on Quran, Hadees, Fiqh, Tasawwuf and more.',
+  articles: 'Read Islamic articles, research and informative religious writings.',
+  aqwaal: 'Discover inspiring Islamic quotes and wisdom from respected scholars.',
+  shayariyan: 'Read devotional Islamic poetry and beautiful Urdu shayari.',
+  contact: 'Contact the MISHKAAT team for questions, suggestions and feedback.',
+  scholar: 'Learn about respected Islamic scholars and their contributions.',
+  admin: 'MISHKAAT administration portal.',
+};
+
+let description = descriptions[currentRoute] || descriptions.home;
+let metaDescription = document.querySelector('meta[name="description"]');
+
+if (!metaDescription) {
+  metaDescription = document.createElement('meta');
+  metaDescription.setAttribute('name', 'description');
+  document.head.appendChild(metaDescription);
+}
+
+metaDescription.setAttribute('content', description);
+}, [currentRoute]);
   const fetchAllData = useCallback(async () => {
     try {
       const [
