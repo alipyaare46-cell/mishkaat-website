@@ -1,9 +1,37 @@
+
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
   <url>
     <loc>https://mishkaat-website-1.onrender.com/</loc>
-    <lastmod>2026-11-10</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
   </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/speeches</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/reels</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/books</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/articles</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/aqwaal</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/shayariyan</loc>
+  </url>
+
+  <url>
+    <loc>https://mishkaat-website-1.onrender.com/contact</loc>
+  </url>
+
 </urlset>
