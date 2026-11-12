@@ -2,7 +2,7 @@ import fs from 'fs';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initDatabase } from './src/server/db';
+import { initDatabase, db } from './src/server/db';
 import { apiRouter } from './src/server/api';
 import { initTursoSync } from './src/server/turso';
 import { cloudRouter } from './src/server/cloudRoutes';
