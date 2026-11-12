@@ -70,7 +70,7 @@ async function startServer() {
     try {
       const xml = generateSitemapXml();
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, must-revalidate');
       res.send(xml);
     } catch (err: any) {
       console.error('Error generating dynamic sitemap:', err);
