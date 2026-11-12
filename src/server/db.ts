@@ -511,7 +511,13 @@ export function initDatabase() {
     `).run('admin-primary', adminUser, hash, 'Chief Administrator');
   }
 
-  // Seed INITIAL SPEECHES if empty
+  // Dummy content seeding is permanently disabled
+  return;
+}
+
+function _unusedSeedDummy() {
+
+  // Seed INITIAL SPEECHES if empty and SEED_SAMPLE_CONTENT=true
   const speechesCount = db.prepare('SELECT count(*) as count FROM speeches').get() as { count: number };
   if (speechesCount.count === 0) {
     const initialSpeeches = [

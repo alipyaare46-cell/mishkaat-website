@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { FileText, Search, Calendar, User, ArrowLeft, Tag, Share2, BookOpen } from 'lucide-react';
 import { Article, ArticleCategory } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ArticlesPageProps {
   articles: Article[];
@@ -17,6 +18,7 @@ export const ArticlesPage: React.FC<ArticlesPageProps> = ({
   onSelectArticle,
   onBackToList
 }) => {
+  const { language, translateCategory } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -64,7 +66,7 @@ export const ArticlesPage: React.FC<ArticlesPageProps> = ({
         <article className="bg-white rounded-2xl border border-stone-200/80 p-6 sm:p-10 space-y-6 shadow-sm">
           <div>
             <span className="text-xs uppercase tracking-widest text-[#D4AF37] font-bold block mb-2">
-              {activeArticle.category_name || 'Islamic Research'}
+              {translateCategory(activeArticle.category_name || 'Islamic Research')}
             </span>
             <h1 className="font-display text-2xl sm:text-4xl font-bold text-stone-900 leading-tight">
               {activeArticle.title}
@@ -178,7 +180,7 @@ export const ArticlesPage: React.FC<ArticlesPageProps> = ({
                 : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
-            All Categories ({articles.length})
+            {language === 'ur' ? 'تمام زمرے' : language === 'ar' ? 'جميع الفئات' : 'All Categories'} ({articles.length})
           </button>
           {categories.map((c) => (
             <button
@@ -190,7 +192,7 @@ export const ArticlesPage: React.FC<ArticlesPageProps> = ({
                   : 'bg-stone-100 text-stone-600 hover:text-stone-900'
               }`}
             >
-              {c.name}
+              {translateCategory(c.name)}
             </button>
           ))}
         </div>
@@ -244,7 +246,7 @@ export const ArticlesPage: React.FC<ArticlesPageProps> = ({
               <div className="p-5 flex-1 flex flex-col justify-between">
                 <div>
                   <span className="text-[10px] uppercase tracking-wider text-[#D4AF37] font-semibold block mb-1">
-                    {article.category_name}
+                    {translateCategory(article.category_name || '')}
                   </span>
                   <h3 className="text-base font-bold text-stone-900 group-hover:text-[#064E3B] transition-colors line-clamp-2">
                     {article.title}

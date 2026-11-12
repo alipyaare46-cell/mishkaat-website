@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BookOpen, Search, Download, ExternalLink, Filter } from 'lucide-react';
 import { Book, BookCategory } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface BooksPageProps {
   books: Book[];
@@ -9,6 +10,7 @@ interface BooksPageProps {
 }
 
 export const BooksPage: React.FC<BooksPageProps> = ({ books, categories, onViewBook }) => {
+  const { t, translateCategory } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
@@ -83,7 +85,7 @@ export const BooksPage: React.FC<BooksPageProps> = ({ books, categories, onViewB
                     : 'bg-stone-100 text-stone-600 hover:text-stone-900'
                 }`}
               >
-                {c.name} {count > 0 ? `(${count})` : ''}
+                {translateCategory(c.name)} {count > 0 ? `(${count})` : ''}
               </button>
             );
           })}
@@ -175,7 +177,7 @@ export const BooksPage: React.FC<BooksPageProps> = ({ books, categories, onViewB
               {/* Book Info */}
               <div className="space-y-1">
                 <span className="text-[10px] uppercase tracking-wider text-[#D4AF37] font-semibold block truncate">
-                  {book.category_name}
+                  {translateCategory(book.category_name || '')}
                 </span>
                 <h3 className="text-xs font-bold text-stone-900 line-clamp-2 leading-snug group-hover:text-[#064E3B] transition-colors">
                   {book.title}

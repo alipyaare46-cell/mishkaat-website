@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Volume2, Play, Search, Filter, Calendar, Clock, User, ArrowRight, Bookmark } from 'lucide-react';
 import { Speech, Scholar, SpeechType } from '../types';
 import { useUserAuth } from '../context/UserAuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { resolveMediaThumbnail, isVideoMedia } from '../utils/media';
 
 interface SpeechesPageProps {
@@ -17,6 +18,7 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
   onPlaySpeech,
   navigate
 }) => {
+  const { t, translateScholar, translateCategory } = useLanguage();
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedScholar, setSelectedScholar] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,7 +111,7 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                {type}
+                {translateCategory(type)}
               </button>
             ))}
           </div>
@@ -137,11 +139,14 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
               className="py-1 px-2.5 bg-stone-50 border border-stone-200 rounded-md text-xs text-stone-700 focus:outline-none focus:ring-1 focus:ring-[#064E3B]"
             >
               <option value="all">All Respected Scholars ({scholars.length})</option>
-              {scholars.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.honorific_title ? `${s.honorific_title} - ` : ''}{s.full_name}
-                </option>
-              ))}
+              {scholars.map((s) => {
+                const sTrans = translateScholar(s);
+                return (
+                  <option key={s.id} value={s.id}>
+                    {sTrans.title ? `${sTrans.title} - ` : ''}{sTrans.name}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -217,7 +222,7 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
                       <span>Video / ویڈیو</span>
                     </>
                   ) : (
-                    <span>{speech.speech_type}</span>
+                    <span>{translateCategory(speech.speech_type)}</span>
                   )}
                 </div>
               </div>
@@ -229,18 +234,26 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
                     {speech.title}
                   </h3>
 
-                  {speech.scholar_slug ? (
-                    <button
-                      onClick={() => navigate('scholar', speech.scholar_slug!)}
-                      className="text-xs text-emerald-800 hover:text-emerald-900 hover:underline font-medium mt-1.5 block truncate text-left cursor-pointer"
-                    >
-                      {speech.scholar_title ? `${speech.scholar_title} - ` : ''}{speech.scholar_name}
-                    </button>
-                  ) : (
-                    <p className="text-xs text-emerald-800 font-medium mt-1.5 truncate">
-                      {speech.scholar_name}
-                    </p>
-                  )}
+                  {(() => {
+                    const sObj = scholars.find((s) => s.id === speech.scholar_id);
+                    const sTrans = sObj ? translateScholar(sObj) : null;
+                    const displayName = sTrans
+                      ? `${sTrans.title ? sTrans.title + ' - ' : ''}${sTrans.name}`
+                      : `${speech.scholar_title ? speech.scholar_title + ' - ' : ''}${speech.scholar_name}`;
+
+                    return speech.scholar_slug ? (
+                      <button
+                        onClick={() => navigate('scholar', speech.scholar_slug!)}
+                        className="text-xs text-emerald-800 hover:text-emerald-900 hover:underline font-medium mt-1.5 block truncate text-left cursor-pointer"
+                      >
+                        {displayName}
+                      </button>
+                    ) : (
+                      <p className="text-xs text-emerald-800 font-medium mt-1.5 truncate">
+                        {displayName}
+                      </p>
+                    );
+                  })()}
 
                   {speech.description && (
                     <p className="text-xs text-stone-500 line-clamp-2 mt-2 leading-relaxed">

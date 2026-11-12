@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock } from 'lucide-react';
 import { Scholar, Speech, Reel } from '../types';
 import { api } from '../services/api';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ScholarProfilePageProps {
   slug: string;
@@ -16,6 +17,7 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
   onPlaySpeech,
   onPlayReel
 }) => {
+  const { t, translateScholar, translateCategory } = useLanguage();
   const [scholar, setScholar] = useState<Scholar | null>(null);
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [reels, setReels] = useState<Reel[]>([]);
@@ -78,6 +80,8 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
     );
   }
 
+  const sTrans = scholar ? translateScholar(scholar) : null;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       
@@ -99,7 +103,7 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
             {scholar.profile_image ? (
               <img
                 src={scholar.profile_image}
-                alt={scholar.full_name}
+                alt={sTrans?.name || scholar.full_name}
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
               />
@@ -111,22 +115,22 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
           {/* Scholar Bio & Titles */}
           <div className="flex-1 text-center sm:text-left space-y-2">
             <span className="text-xs uppercase tracking-widest text-[#D4AF37] font-bold block">
-              {scholar.honorific_title}
+              {sTrans?.title || scholar.honorific_title}
             </span>
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-stone-900">
-              {scholar.full_name}
+              {sTrans?.name || scholar.full_name}
             </h1>
 
-            {scholar.location && (
+            {(sTrans?.location || scholar.location) && (
               <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-stone-500">
                 <MapPin className="w-3.5 h-3.5 text-emerald-800" />
-                <span>{scholar.location}</span>
+                <span>{sTrans?.location || scholar.location}</span>
               </div>
             )}
 
-            {scholar.biography ? (
+            {(sTrans?.bio || scholar.biography) ? (
               <p className="text-xs sm:text-sm text-stone-600 leading-relaxed pt-2 font-sans">
-                {scholar.biography}
+                {sTrans?.bio || scholar.biography}
               </p>
             ) : (
               <p className="text-xs text-stone-400 italic pt-2">

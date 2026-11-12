@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDatabase } from './src/server/db';
 import { apiRouter } from './src/server/api';
+import { initTursoSync } from './src/server/turso';
+import { cloudRouter } from './src/server/cloudRoutes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +18,8 @@ async function startServer() {
   try {
     initDatabase();
     console.log('Database initialized successfully with scholars, categories & settings.');
+    // Connect & synchronize with Turso Cloud for permanent zero-data-loss storage
+    initTursoSync().catch((err) => console.error('Turso sync warning:', err));
   } catch (err) {
     console.error('Failed to initialize database:', err);
   }
@@ -58,6 +62,7 @@ async function startServer() {
 
   // Mount API routes
   app.use('/api', apiRouter);
+  app.use('/api/cloud', cloudRouter);
 
   // In development, hook into Vite middlewares; in production, serve dist
   const isDev = process.env.NODE_ENV !== 'production';

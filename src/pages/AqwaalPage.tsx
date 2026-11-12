@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Quote, Search, Filter, BookOpen } from 'lucide-react';
 import { Aqwaal, AqwaalCategory, AqwaalType } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface AqwaalPageProps {
   aqwaal: Aqwaal[];
@@ -8,6 +9,7 @@ interface AqwaalPageProps {
 }
 
 export const AqwaalPage: React.FC<AqwaalPageProps> = ({ aqwaal, categories }) => {
+  const { language, translateCategory } = useLanguage();
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +100,9 @@ export const AqwaalPage: React.FC<AqwaalPageProps> = ({ aqwaal, categories }) =>
         {/* Categories selector */}
         {categories.length > 0 && (
           <div className="flex items-center gap-2 pt-3 border-t border-stone-100 text-xs overflow-x-auto pb-1">
-            <span className="text-stone-500 font-medium whitespace-nowrap">Category:</span>
+            <span className="text-stone-500 font-medium whitespace-nowrap">
+              {language === 'ur' ? 'موضوع / زمرہ:' : language === 'ar' ? 'الموضوع:' : 'Category:'}
+            </span>
             <button
               onClick={() => setSelectedCategory('all')}
               className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
@@ -107,7 +111,7 @@ export const AqwaalPage: React.FC<AqwaalPageProps> = ({ aqwaal, categories }) =>
                   : 'text-stone-600 hover:bg-stone-100'
               }`}
             >
-              All Topics
+              {language === 'ur' ? 'تمام موضوعات' : language === 'ar' ? 'جميع الموضوعات' : 'All Topics'}
             </button>
             {categories.map((c) => (
               <button
@@ -119,7 +123,7 @@ export const AqwaalPage: React.FC<AqwaalPageProps> = ({ aqwaal, categories }) =>
                     : 'text-stone-600 hover:bg-stone-100'
                 }`}
               >
-                {c.name}
+                {translateCategory(c.name)}
               </button>
             ))}
           </div>
@@ -148,7 +152,7 @@ export const AqwaalPage: React.FC<AqwaalPageProps> = ({ aqwaal, categories }) =>
                     {q.type}
                   </span>
                   {q.category_name && (
-                    <span className="text-stone-500 font-medium">{q.category_name}</span>
+                    <span className="text-stone-500 font-medium">{translateCategory(q.category_name)}</span>
                   )}
                 </div>
 

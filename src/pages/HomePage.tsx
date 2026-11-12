@@ -40,7 +40,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onViewBook,
   onReadArticle
 }) => {
-  const { t, language } = useLanguage();
+  const { t, language, translateScholar, translateCategory } = useLanguage();
   const { toggleBookmark, isBookmarked } = useUserAuth();
 
   // Respect settings visibility toggles
@@ -192,7 +192,9 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {scholars.slice(0, 6).map((scholar) => (
+            {scholars.slice(0, 6).map((scholar) => {
+              const sTrans = translateScholar(scholar);
+              return (
               <div
                 key={scholar.id}
                 className="bg-white rounded-xl border border-stone-200/80 p-5 hover:border-[#D4AF37]/60 hover:shadow-md transition-all flex flex-col justify-between"
@@ -202,7 +204,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {scholar.profile_image ? (
                       <img
                         src={scholar.profile_image}
-                        alt={scholar.full_name}
+                        alt={sTrans.name}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover"
                       />
@@ -212,22 +214,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                   <div className="min-w-0">
                     <span className="text-[10px] uppercase tracking-wider text-[#D4AF37] font-semibold block">
-                      {scholar.honorific_title}
+                      {sTrans.title}
                     </span>
                     <h3 className="text-sm font-bold text-stone-900 truncate mt-0.5">
-                      {scholar.full_name}
+                      {sTrans.name}
                     </h3>
-                    {scholar.location && (
+                    {sTrans.location && (
                       <p className="text-[11px] text-stone-400 mt-0.5 truncate">
-                        {scholar.location}
+                        {sTrans.location}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {scholar.biography && (
+                {sTrans.bio && (
                   <p className="text-xs text-stone-600 line-clamp-2 mt-3 leading-relaxed">
-                    {scholar.biography}
+                    {sTrans.bio}
                   </p>
                 )}
 
@@ -241,7 +243,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </button>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         </section>
       )}
@@ -314,7 +317,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                             <span>Video / ویڈیو</span>
                           </>
                         ) : (
-                          <span>{speech.speech_type}</span>
+                          <span>{translateCategory(speech.speech_type)}</span>
                         )}
                       </div>
                       <button
@@ -518,7 +521,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                   <div className="space-y-1">
                     <span className="text-[10px] text-emerald-800 font-bold block truncate">
-                      {book.category_name}
+                      {translateCategory(book.category_name || '')}
                     </span>
                     <h4 className="text-xs font-bold text-stone-900 line-clamp-1 group-hover:text-[#064E3B] transition-colors">
                       {book.title}
@@ -593,7 +596,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="p-5 flex-1 flex flex-col justify-between">
                     <div>
                       <span className="text-[10px] uppercase tracking-wider text-[#D4AF37] font-semibold block mb-1">
-                        {article.category_name}
+                        {translateCategory(article.category_name || '')}
                       </span>
                       <h3 className="text-base font-bold text-stone-900 group-hover:text-[#064E3B] transition-colors line-clamp-2">
                         {article.title}

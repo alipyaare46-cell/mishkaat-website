@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Feather, Search, ChevronDown, ChevronUp, Star, Calendar, User } from 'lucide-react';
 import { Shayariyan } from '../types';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ShayariyanPageProps {
   shayariyan: Shayariyan[];
 }
 
 export const ShayariyanPage: React.FC<ShayariyanPageProps> = ({ shayariyan }) => {
+  const { translateCategory } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -98,7 +100,7 @@ export const ShayariyanPage: React.FC<ShayariyanPageProps> = ({ shayariyan }) =>
                       </span>
                     )}
                     <span className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">
-                      {item.category || 'Naat / Manqabat'}
+                      {translateCategory(item.category || 'Naat / Manqabat')}
                     </span>
                   </div>
 

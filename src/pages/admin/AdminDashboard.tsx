@@ -1,5 +1,5 @@
-import React from 'react';
-import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, Plus, Settings, Key, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, Plus, Settings, Key, ExternalLink, Cloud, CheckCircle2, Download, RefreshCw, Database } from 'lucide-react';
 import { WebsiteStats, AdminUser } from '../../types';
 
 interface AdminDashboardProps {
@@ -15,6 +15,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   setActiveTab,
   onNavigatePublic
 }) => {
+  const [cloudStatus, setCloudStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+    tursoUrl: string;
+    lastSyncTime: string | null;
+  } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/cloud/status')
+      .then((res) => res.json())
+      .then((data) => setCloudStatus(data))
+      .catch(() => {});
+  }, []);
+
+  const handleSyncPush = async () => {
+    setIsSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch('/api/cloud/sync-push', { method: 'POST' });
+      const data = await res.json();
+      setSyncMsg(data.message || 'Cloud sync successful!');
+      const statusRes = await fetch('/api/cloud/status');
+      setCloudStatus(await statusRes.json());
+    } catch {
+      setSyncMsg('Sync failed.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncMsg(null), 4000);
+    }
+  };
+
+  const handleDownloadBackup = () => {
+    window.location.href = '/api/cloud/backup-download';
+  };
+
   return (
     <div className="space-y-8">
       
@@ -39,6 +76,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <span>View Public Platform</span>
             <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Turso Permanent Cloud Storage & Backup Card */}
+      <div className="bg-white border border-[#D4AF37]/40 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-[#064E3B] flex items-center justify-center shrink-0">
+            <Cloud className="w-5 h-5 text-emerald-700" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs sm:text-sm font-bold text-stone-900">
+                Permanent Cloud Storage (Turso Cloud SQLite)
+              </h4>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <span>Connected &amp; Active</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-0.5">
+              Zero Data Loss Guarantee: All speeches, reels, books, and articles are stored permanently in the cloud.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          {syncMsg && (
+            <span className="text-[11px] text-emerald-700 font-semibold animate-pulse">
+              {syncMsg}
+            </span>
+          )}
+          <button
+            onClick={handleSyncPush}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+            title="Force push latest local updates to Turso Cloud"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Cloud'}</span>
+          </button>
+          <button
+            onClick={handleDownloadBackup}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#064E3B] hover:bg-[#075c46] text-[#F3E5AB] text-xs font-bold transition-colors cursor-pointer shadow-xs"
+            title="Download full offline JSON backup to your device"
+          >
+            <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span>Download Backup (.json)</span>
           </button>
         </div>
       </div>

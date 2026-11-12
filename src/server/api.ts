@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { db, generateId } from './db';
+import { syncRecordToTurso, syncDeleteFromTurso, syncDeleteWhereFromTurso } from './turso';
 
 export const apiRouter = Router();
 
@@ -508,13 +509,16 @@ apiRouter.post('/user/bookmarks/toggle', requireUser, (req, res) => {
 
   if (existing) {
     db.prepare('DELETE FROM user_bookmarks WHERE id = ?').run(existing.id);
+    syncDeleteFromTurso('user_bookmarks', existing.id);
     res.json({ bookmarked: false, message: 'Removed from your saved collection' });
   } else {
     const id = generateId('bmk');
+    const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO user_bookmarks (id, user_id, item_type, item_id, created_at)
       VALUES (?, ?, ?, ?, datetime('now'))
     `).run(id, sessionUser.user_id, item_type, item_id);
+    syncRecordToTurso('user_bookmarks', { id, user_id: sessionUser.user_id, item_type, item_id, created_at: now });
     res.json({ bookmarked: true, message: 'Saved to your spiritual collection!' });
   }
 });
@@ -570,11 +574,14 @@ apiRouter.post('/interactions/like', requireUser, (req, res) => {
   let liked = false;
   if (existing) {
     db.prepare('DELETE FROM likes WHERE id = ?').run(existing.id);
+    syncDeleteFromTurso('likes', existing.id);
     liked = false;
   } else {
     const id = generateId('lk');
+    const now = new Date().toISOString();
     db.prepare('INSERT INTO likes (id, user_id, item_type, item_id, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
       .run(id, sessionUser.user_id, item_type, item_id);
+    syncRecordToTurso('likes', { id, user_id: sessionUser.user_id, item_type, item_id, created_at: now });
     liked = true;
   }
 
@@ -601,6 +608,7 @@ apiRouter.post('/interactions/comment', requireUser, (req, res) => {
   `).run(id, sessionUser.user_id, sessionUser.full_name, item_type, item_id, content.trim());
 
   const newComment = db.prepare('SELECT id, user_id, user_name, content, created_at FROM comments WHERE id = ?').get(id);
+  syncRecordToTurso('comments', newComment as any);
   const totalComments = db.prepare('SELECT count(*) as c FROM comments WHERE item_type = ? AND item_id = ?').get(item_type, item_id) as { c: number };
 
   res.status(201).json({
@@ -631,6 +639,7 @@ apiRouter.delete('/interactions/comment/:id', (req, res) => {
 
   if (adminSession || (userSession && userSession.user_id === comment.user_id)) {
     db.prepare('DELETE FROM comments WHERE id = ?').run(id);
+    syncDeleteFromTurso('comments', id);
     res.json({ success: true });
   } else {
     res.status(403).json({ error: 'Unauthorized to delete this comment' });
@@ -764,6 +773,9 @@ apiRouter.put('/settings', requireAdmin, (req, res) => {
   });
 
   tx(Object.entries(settings));
+  for (const [key, val] of Object.entries(settings)) {
+    syncRecordToTurso('website_settings', { key, value: String(val) });
+  }
   res.json({ success: true });
 });
 
@@ -881,6 +893,7 @@ apiRouter.post('/scholars', requireAdmin, (req, res) => {
     `).run(id, full_name, honorific_title, slug, biography || '', profile_image || null, location || '', is_published ? 1 : 0);
 
     const created = db.prepare('SELECT * FROM scholars WHERE id = ?').get(id);
+    syncRecordToTurso('scholars', created as any);
     res.status(201).json(created);
   } catch (err: any) {
     if (err.message.includes('UNIQUE constraint')) {
@@ -903,6 +916,7 @@ apiRouter.put('/scholars/:id', requireAdmin, (req, res) => {
     `).run(full_name, honorific_title, slug, biography, profile_image, location, is_published ? 1 : 0, id);
 
     const updated = db.prepare('SELECT * FROM scholars WHERE id = ?').get(id);
+    syncRecordToTurso('scholars', updated as any);
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -920,6 +934,7 @@ apiRouter.delete('/scholars/:id', requireAdmin, (req, res) => {
     }
     db.prepare('UPDATE aqwaal SET scholar_id = NULL WHERE scholar_id = ?').run(id);
     db.prepare('DELETE FROM scholars WHERE id = ?').run(id);
+    syncDeleteFromTurso('scholars', id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete scholar' });
@@ -1009,6 +1024,7 @@ apiRouter.post('/speeches', requireAdmin, (req, res) => {
   `).run(id, title, validScholarId, speech_type, description || '', thumbnail || null, media_url, duration || '', upload_date || new Date().toISOString().split('T')[0], tags || '', is_published !== 0 ? 1 : 0);
 
   const created = db.prepare('SELECT * FROM speeches WHERE id = ?').get(id);
+  syncRecordToTurso('speeches', created as any);
   res.status(201).json(created);
 });
 
@@ -1038,6 +1054,7 @@ apiRouter.put('/speeches/:id', requireAdmin, (req, res) => {
   `).run(title, validScholarId, speech_type, description, thumbnail, media_url, duration, upload_date, tags, is_published !== 0 ? 1 : 0, id);
 
   const updated = db.prepare('SELECT * FROM speeches WHERE id = ?').get(id);
+  syncRecordToTurso('speeches', updated as any);
   res.json(updated);
 });
 
@@ -1048,6 +1065,10 @@ apiRouter.delete('/speeches/:id', requireAdmin, (req, res) => {
     db.prepare("DELETE FROM likes WHERE item_type = 'speech' AND item_id = ?").run(id);
     db.prepare("DELETE FROM comments WHERE item_type = 'speech' AND item_id = ?").run(id);
     db.prepare('DELETE FROM speeches WHERE id = ?').run(id);
+    syncDeleteFromTurso('speeches', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'speech' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('likes', "item_type = 'speech' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('comments', "item_type = 'speech' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete speech' });
@@ -1131,6 +1152,7 @@ apiRouter.post('/reels', requireAdmin, (req, res) => {
   `).run(id, title, validScholarId, description || '', video_url, thumbnail || null, duration || '', is_published !== 0 ? 1 : 0);
 
   const created = db.prepare('SELECT * FROM reels WHERE id = ?').get(id);
+  syncRecordToTurso('reels', created as any);
   res.status(201).json(created);
 });
 
@@ -1160,6 +1182,7 @@ apiRouter.put('/reels/:id', requireAdmin, (req, res) => {
   `).run(title, validScholarId, description, video_url, thumbnail, duration, is_published !== 0 ? 1 : 0, id);
 
   const updated = db.prepare('SELECT * FROM reels WHERE id = ?').get(id);
+  syncRecordToTurso('reels', updated as any);
   res.json(updated);
 });
 
@@ -1170,6 +1193,10 @@ apiRouter.delete('/reels/:id', requireAdmin, (req, res) => {
     db.prepare("DELETE FROM likes WHERE item_type = 'reel' AND item_id = ?").run(id);
     db.prepare("DELETE FROM comments WHERE item_type = 'reel' AND item_id = ?").run(id);
     db.prepare('DELETE FROM reels WHERE id = ?').run(id);
+    syncDeleteFromTurso('reels', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'reel' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('likes', "item_type = 'reel' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('comments', "item_type = 'reel' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete reel' });
@@ -1200,7 +1227,9 @@ apiRouter.post('/book-categories', requireAdmin, (req, res) => {
       INSERT INTO book_categories (id, name, slug, description, created_at)
       VALUES (?, ?, ?, ?, datetime('now'))
     `).run(id, name, slug, description || '');
-    res.status(201).json({ id, name, slug, description });
+    const createdCat = { id, name, slug, description: description || '' };
+    syncRecordToTurso('book_categories', createdCat);
+    res.status(201).json(createdCat);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -1213,6 +1242,7 @@ apiRouter.delete('/book-categories/:id', requireAdmin, (req, res) => {
     return;
   }
   db.prepare('DELETE FROM book_categories WHERE id = ?').run(req.params.id);
+  syncDeleteFromTurso('book_categories', req.params.id);
   res.json({ success: true });
 });
 
@@ -1288,6 +1318,7 @@ apiRouter.post('/books', requireAdmin, (req, res) => {
   `).run(id, title, author_name, validCategoryId, cover_image || null, description || '', language || 'Urdu', file_url || null, external_read_url || null, publication_details || '', allow_download ? 1 : 0, is_published !== 0 ? 1 : 0);
 
   const created = db.prepare('SELECT * FROM books WHERE id = ?').get(id);
+  syncRecordToTurso('books', created as any);
   res.status(201).json(created);
 });
 
@@ -1309,6 +1340,7 @@ apiRouter.put('/books/:id', requireAdmin, (req, res) => {
   `).run(title, author_name, validCategoryId, cover_image, description, language, file_url, external_read_url, publication_details, allow_download ? 1 : 0, is_published !== 0 ? 1 : 0, id);
 
   const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(id);
+  syncRecordToTurso('books', updated as any);
   res.json(updated);
 });
 
@@ -1317,6 +1349,8 @@ apiRouter.delete('/books/:id', requireAdmin, (req, res) => {
   try {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'book' AND item_id = ?").run(id);
     db.prepare('DELETE FROM books WHERE id = ?').run(id);
+    syncDeleteFromTurso('books', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'book' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete book' });
@@ -1347,7 +1381,9 @@ apiRouter.post('/article-categories', requireAdmin, (req, res) => {
       INSERT INTO article_categories (id, name, slug, description, created_at)
       VALUES (?, ?, ?, ?, datetime('now'))
     `).run(id, name, slug, description || '');
-    res.status(201).json({ id, name, slug, description });
+    const createdCat = { id, name, slug, description: description || '' };
+    syncRecordToTurso('article_categories', createdCat);
+    res.status(201).json(createdCat);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -1360,6 +1396,7 @@ apiRouter.delete('/article-categories/:id', requireAdmin, (req, res) => {
     return;
   }
   db.prepare('DELETE FROM article_categories WHERE id = ?').run(req.params.id);
+  syncDeleteFromTurso('article_categories', req.params.id);
   res.json({ success: true });
 });
 
@@ -1461,6 +1498,7 @@ apiRouter.post('/articles', requireAdmin, (req, res) => {
     `).run(id, title, safeSlug, validCategoryId, author_name || 'Admin', featured_image || null, excerpt || '', content, publication_date || new Date().toISOString().split('T')[0], tags || '', is_published !== 0 ? 1 : 0);
 
     const created = db.prepare('SELECT * FROM articles WHERE id = ?').get(id);
+    syncRecordToTurso('articles', created as any);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -1495,6 +1533,7 @@ apiRouter.put('/articles/:id', requireAdmin, (req, res) => {
     `).run(title, safeSlug, validCategoryId, author_name, featured_image, excerpt, content, publication_date, tags, is_published !== 0 ? 1 : 0, id);
 
     const updated = db.prepare('SELECT * FROM articles WHERE id = ?').get(id);
+    syncRecordToTurso('articles', updated as any);
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1506,6 +1545,8 @@ apiRouter.delete('/articles/:id', requireAdmin, (req, res) => {
   try {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'article' AND item_id = ?").run(id);
     db.prepare('DELETE FROM articles WHERE id = ?').run(id);
+    syncDeleteFromTurso('articles', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'article' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete article' });
@@ -1532,7 +1573,9 @@ apiRouter.post('/aqwaal-categories', requireAdmin, (req, res) => {
       INSERT INTO aqwaal_categories (id, name, slug, created_at)
       VALUES (?, ?, ?, datetime('now'))
     `).run(id, name, slug);
-    res.status(201).json({ id, name, slug });
+    const createdCat = { id, name, slug };
+    syncRecordToTurso('aqwaal_categories', createdCat);
+    res.status(201).json(createdCat);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -1541,6 +1584,7 @@ apiRouter.post('/aqwaal-categories', requireAdmin, (req, res) => {
 apiRouter.delete('/aqwaal-categories/:id', requireAdmin, (req, res) => {
   db.prepare('UPDATE aqwaal SET category_id = NULL WHERE category_id = ?').run(req.params.id);
   db.prepare('DELETE FROM aqwaal_categories WHERE id = ?').run(req.params.id);
+  syncDeleteFromTurso('aqwaal_categories', req.params.id);
   res.json({ success: true });
 });
 
@@ -1594,6 +1638,7 @@ apiRouter.post('/aqwaal', requireAdmin, (req, res) => {
   `).run(id, text, type, scholar_id || null, attributed_to || '', category_id || null, reference_source || '', image_url || null, is_published ? 1 : 0);
 
   const created = db.prepare('SELECT * FROM aqwaal WHERE id = ?').get(id);
+  syncRecordToTurso('aqwaal', created as any);
   res.status(201).json(created);
 });
 
@@ -1608,6 +1653,7 @@ apiRouter.put('/aqwaal/:id', requireAdmin, (req, res) => {
   `).run(text, type, scholar_id || null, attributed_to, category_id || null, reference_source, image_url, is_published ? 1 : 0, id);
 
   const updated = db.prepare('SELECT * FROM aqwaal WHERE id = ?').get(id);
+  syncRecordToTurso('aqwaal', updated as any);
   res.json(updated);
 });
 
@@ -1616,6 +1662,8 @@ apiRouter.delete('/aqwaal/:id', requireAdmin, (req, res) => {
   try {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'aqwaal' AND item_id = ?").run(id);
     db.prepare('DELETE FROM aqwaal WHERE id = ?').run(id);
+    syncDeleteFromTurso('aqwaal', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'aqwaal' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete aqwaal' });
@@ -1668,6 +1716,7 @@ apiRouter.post('/shayariyan', requireAdmin, (req, res) => {
   `).run(id, title, poet_name, poet_image || null, poetry_text, sharah || '', category || 'Naat / Manqabat', language || 'Urdu', publication_date || new Date().toISOString().split('T')[0], is_featured ? 1 : 0, is_published ? 1 : 0);
 
   const created = db.prepare('SELECT * FROM shayariyan WHERE id = ?').get(id);
+  syncRecordToTurso('shayariyan', created as any);
   res.status(201).json(created);
 });
 
@@ -1682,6 +1731,7 @@ apiRouter.put('/shayariyan/:id', requireAdmin, (req, res) => {
   `).run(title, poet_name, poet_image, poetry_text, sharah, category, language, publication_date, is_featured ? 1 : 0, is_published ? 1 : 0, id);
 
   const updated = db.prepare('SELECT * FROM shayariyan WHERE id = ?').get(id);
+  syncRecordToTurso('shayariyan', updated as any);
   res.json(updated);
 });
 
@@ -1690,6 +1740,8 @@ apiRouter.delete('/shayariyan/:id', requireAdmin, (req, res) => {
   try {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'shayariyan' AND item_id = ?").run(id);
     db.prepare('DELETE FROM shayariyan WHERE id = ?').run(id);
+    syncDeleteFromTurso('shayariyan', id);
+    syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'shayariyan' AND item_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete shayariyan' });
@@ -1825,6 +1877,9 @@ apiRouter.post('/contact', (req: Request, res: Response) => {
       console.warn('Email dispatch warning:', relayErr);
     }
 
+    const createdMsg = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(id);
+    if (createdMsg) syncRecordToTurso('contact_messages', createdMsg as any);
+
     res.status(201).json({
       success: true,
       message: `JazakAllah Khair! Your message has been safely received and immediately forwarded to website administration (${targetAdminGmail}).`
@@ -1849,6 +1904,8 @@ apiRouter.put('/contact-messages/:id/read', requireAdmin, (req: Request, res: Re
   const { id } = req.params;
   try {
     db.prepare(`UPDATE contact_messages SET is_read = 1 WHERE id = ?`).run(id);
+    const updatedMsg = db.prepare('SELECT * FROM contact_messages WHERE id = ?').get(id);
+    if (updatedMsg) syncRecordToTurso('contact_messages', updatedMsg as any);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to update message status' });
@@ -1859,6 +1916,7 @@ apiRouter.delete('/contact-messages/:id', requireAdmin, (req: Request, res: Resp
   const { id } = req.params;
   try {
     db.prepare('DELETE FROM contact_messages WHERE id = ?').run(id);
+    syncDeleteFromTurso('contact_messages', id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete message' });

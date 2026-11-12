@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { translateScholar as rawTranslateScholar, translateCategory as rawTranslateCategory, TranslatedScholar } from '../utils/translations';
+import { Scholar } from '../types';
 
 export type Language = 'en' | 'ur' | 'ar';
 
@@ -283,6 +285,8 @@ interface LanguageContextType {
   setLanguage: (lang: Language) => void;
   t: Translations;
   isRTL: boolean;
+  translateScholar: (scholar: Scholar) => TranslatedScholar;
+  translateCategory: (nameOrSlug: string) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -300,13 +304,23 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const isRTL = language === 'ur' || language === 'ar';
 
+  const translateScholar = (scholar: Scholar) => rawTranslateScholar(scholar, language);
+  const translateCategory = (nameOrSlug: string) => rawTranslateCategory(nameOrSlug, language);
+
   useEffect(() => {
     document.documentElement.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', language);
   }, [language, isRTL]);
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t: translations[language], isRTL }}>
+    <LanguageContext.Provider value={{
+      language,
+      setLanguage,
+      t: translations[language],
+      isRTL,
+      translateScholar,
+      translateCategory
+    }}>
       {children}
     </LanguageContext.Provider>
   );
@@ -319,3 +333,4 @@ export function useLanguage() {
   }
   return context;
 }
+

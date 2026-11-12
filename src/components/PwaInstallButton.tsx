@@ -176,9 +176,11 @@ function InstallGuideModal({ deferredPrompt, onPromptNative, onClose }: InstallG
   const [activeTab, setActiveTab] = useState<'android' | 'ios' | 'pc'>(detectPlatform());
   const [copiedLink, setCopiedLink] = useState(false);
 
+  const OFFICIAL_SITE_URL = 'https://mishkaat-website-1.onrender.com';
+
   const handleCopy = () => {
     try {
-      navigator.clipboard.writeText(window.location.origin);
+      navigator.clipboard.writeText(OFFICIAL_SITE_URL);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
     } catch {}
@@ -333,12 +335,17 @@ function InstallGuideModal({ deferredPrompt, onPromptNative, onClose }: InstallG
           )}
 
           {/* Copy URL fallback */}
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs">
-            <span className="text-stone-400 text-[11px]">ویب سائٹ کا لنک کاپی کریں:</span>
+          <div className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="min-w-0">
+              <span className="text-stone-400 text-[11px] block">ویب سائٹ کا سرکاری لنک:</span>
+              <span className="text-[#D4AF37] text-[11px] font-mono truncate block">
+                {OFFICIAL_SITE_URL}
+              </span>
+            </div>
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-700 hover:bg-stone-600 text-stone-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors shrink-0"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#D4AF37]" />}
               <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
