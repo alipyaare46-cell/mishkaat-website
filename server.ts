@@ -74,11 +74,18 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
+   const distPath = path.resolve(__dirname, 'dist');
+
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain');
+  res.sendFile(path.join(distPath, 'robots.txt'));
+});
+
+app.use(express.static(distPath));
+
+app.get('*', (_req, res) => {
+  res.sendFile(path.resolve(distPath, 'index.html'));
+});
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
