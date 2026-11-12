@@ -6,6 +6,7 @@ import { initDatabase, db } from './src/server/db';
 import { apiRouter } from './src/server/api';
 import { initTursoSync } from './src/server/turso';
 import { cloudRouter } from './src/server/cloudRoutes';
+import { generateSitemapXml } from './src/server/sitemap';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,9 +65,28 @@ async function startServer() {
   app.use('/api', apiRouter);
   app.use('/api/cloud', cloudRouter);
 
+  // Dynamic XML Sitemap Handler
+  const sitemapHandler = (_req: express.Request, res: express.Response) => {
+    try {
+      const xml = generateSitemapXml();
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+      res.send(xml);
+    } catch (err: any) {
+      console.error('Error generating dynamic sitemap:', err);
+      res.status(500).type('text/plain').send('Error generating dynamic sitemap');
+    }
+  };
+
   // In development, hook into Vite middlewares; in production, serve dist
   const isDev = process.env.NODE_ENV !== 'production';
   if (isDev) {
+    app.get('/sitemap.xml', sitemapHandler);
+    app.get('/robots.txt', (_req, res) => {
+      res.type('text/plain');
+      res.sendFile(path.resolve(process.cwd(), 'public/robots.txt'));
+    });
+
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -74,18 +94,21 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-   const distPath = path.resolve(__dirname, 'dist');
+    const distPath = path.resolve(__dirname, 'dist');
 
-app.get('/robots.txt', (_req, res) => {
-  res.type('text/plain');
-  res.sendFile(path.join(distPath, 'robots.txt'));
-});
+    app.get('/robots.txt', (_req, res) => {
+      res.type('text/plain');
+      res.sendFile(path.join(distPath, 'robots.txt'));
+    });
 
-app.use(express.static(distPath));
+    // Dynamic XML Sitemap route inside production server setup, before express.static and before app.get('*')
+    app.get('/sitemap.xml', sitemapHandler);
 
-app.get('*', (_req, res) => {
-  res.sendFile(path.resolve(distPath, 'index.html'));
-});
+    app.use(express.static(distPath));
+
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
