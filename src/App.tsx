@@ -37,45 +37,17 @@ import { ScholarProfilePage } from './pages/ScholarProfilePage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminLayout } from './pages/admin/AdminLayout';
+import {
+  parseRouteFromPathname,
+  getPathFromRoute,
+  buildRouteSeoMeta,
+  applyClientSeo
+} from './utils/seo';
 
 // Helpers for clean URL path-based routing & browser history
 function getRouteFromPath(): { route: string; param: string | null } {
   if (typeof window === 'undefined') return { route: 'home', param: null };
-
-  let rawPath = window.location.pathname.toLowerCase().replace(/^\/+|\/+$/g, '');
-  if (!rawPath && window.location.hash) {
-    rawPath = window.location.hash.replace(/^#\/?/, '').toLowerCase().replace(/^\/+|\/+$/g, '');
-  }
-
-  if (!rawPath) return { route: 'home', param: null };
-
-  const parts = rawPath.split('/');
-  const segment1 = parts[0];
-  const param = parts[1] ? decodeURIComponent(parts[1]) : null;
-
-  if (segment1 === 'scholar') {
-    return { route: 'scholar', param };
-  }
-  if (segment1 === 'article' || segment1 === 'articles') {
-    return { route: 'articles', param };
-  }
-  if (['home', 'speeches', 'reels', 'books', 'articles', 'aqwaal', 'shayariyan', 'contact', 'admin'].includes(segment1)) {
-    return { route: segment1, param };
-  }
-
-  return { route: 'home', param: null };
-}
-
-function getPathFromRoute(route: string, param?: string | null): string {
-  if (route === 'home') return '/';
-  if (route === 'scholar' && param) return `/scholar/${encodeURIComponent(param)}`;
-  if (route === 'articles') {
-    return param ? `/articles/${encodeURIComponent(param)}` : '/articles';
-  }
-  if (route === 'article' && param) {
-    return `/articles/${encodeURIComponent(param)}`;
-  }
-  return `/${route}`;
+  return parseRouteFromPathname(window.location.pathname, window.location.hash);
 }
 
 function MainApp() {
@@ -114,45 +86,32 @@ function MainApp() {
   const [aqwaalCategories, setAqwaalCategories] = useState<AqwaalCategory[]>([]);
   const [shayariyan, setShayariyan] = useState<Shayariyan[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
-useEffect(() => {
-  const pageTitles: Record<string, string> = {
-    home: 'MISHKAAT | Islamic Knowledge & Media Platform',
-    speeches: 'Islamic Speeches | MISHKAAT',
-    reels: 'Islamic Reels | MISHKAAT',
-    books: 'Islamic Books | MISHKAAT',
-    articles: 'Islamic Articles | MISHKAAT',
-    aqwaal: 'Islamic Aqwaal | MISHKAAT',
-    shayariyan: 'Islamic Shayariyan | MISHKAAT',
-    contact: 'Contact Us | MISHKAAT',
-    scholar: 'Islamic Scholars | MISHKAAT',
-    admin: 'Admin Portal | MISHKAAT',
-  };
 
-  document.title = pageTitles[currentRoute] || 'MISHKAAT | Islamic Platform';
-  const descriptions: Record<string, string> = {
-  home: 'Explore authentic Islamic knowledge, speeches, books and articles at MISHKAAT.',
-  speeches: 'Listen to Islamic speeches and beneficial lectures from Ahl-e-Sunnat scholars.',
-  reels: 'Watch Islamic reels and short videos with meaningful Islamic reminders.',
-  books: 'Explore Islamic books on Quran, Hadees, Fiqh, Tasawwuf and more.',
-  articles: 'Read Islamic articles, research and informative religious writings.',
-  aqwaal: 'Discover inspiring Islamic quotes and wisdom from respected scholars.',
-  shayariyan: 'Read devotional Islamic poetry and beautiful Urdu shayari.',
-  contact: 'Contact the MISHKAAT team for questions, suggestions and feedback.',
-  scholar: 'Learn about respected Islamic scholars and their contributions.',
-  admin: 'MISHKAAT administration portal.',
-};
+  useEffect(() => {
+    const activeScholar =
+      currentRoute === 'scholar' && selectedScholarSlug
+        ? scholars.find((s) => s.slug === selectedScholarSlug) || null
+        : null;
 
-let description = descriptions[currentRoute] || descriptions.home;
-let metaDescription = document.querySelector('meta[name="description"]');
+    const activeArticle =
+      currentRoute === 'articles' && selectedArticleSlug
+        ? articles.find((a) => a.slug === selectedArticleSlug) || null
+        : null;
 
-if (!metaDescription) {
-  metaDescription = document.createElement('meta');
-  metaDescription.setAttribute('name', 'description');
-  document.head.appendChild(metaDescription);
-}
+    const meta = buildRouteSeoMeta({
+      route: currentRoute,
+      slug:
+        currentRoute === 'scholar'
+          ? selectedScholarSlug
+          : currentRoute === 'articles'
+            ? selectedArticleSlug
+            : null,
+      scholar: activeScholar,
+      article: activeArticle
+    });
 
-metaDescription.setAttribute('content', description);
-}, [currentRoute]);
+    applyClientSeo(meta);
+  }, [currentRoute, selectedScholarSlug, selectedArticleSlug, scholars, articles]);
   const fetchAllData = useCallback(async () => {
     try {
       const [

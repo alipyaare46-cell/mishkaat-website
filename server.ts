@@ -7,6 +7,7 @@ import { apiRouter } from './src/server/api';
 import { initTursoSync } from './src/server/turso';
 import { cloudRouter } from './src/server/cloudRoutes';
 import { generateSitemapXml } from './src/server/sitemap';
+import { injectSeoIntoHtml } from './src/server/seo';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,11 +91,33 @@ async function startServer() {
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      if (
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/uploads/') ||
+        (/\.[a-z0-9]{1,8}$/i.test(req.path) && !req.path.endsWith('.html'))
+      ) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        const rawTemplate = fs.readFileSync(indexPath, 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
+        const html = injectSeoIntoHtml(transformed, req.path);
+        res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
+      } catch (err) {
+        vite.ssrFixStacktrace(err as Error);
+        next(err);
+      }
+    });
   } else {
     const distPath = path.resolve(__dirname, 'dist');
+    const distIndexPath = path.resolve(distPath, 'index.html');
+    let cachedDistHtml: string | null = null;
 
     app.get('/robots.txt', (_req, res) => {
       res.type('text/plain');
@@ -104,10 +127,26 @@ async function startServer() {
     // Dynamic XML Sitemap route inside production server setup, before express.static and before app.get('*')
     app.get('/sitemap.xml', sitemapHandler);
 
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { index: false }));
 
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+    app.get('*', (req, res, next) => {
+      if (
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/uploads/') ||
+        (/\.[a-z0-9]{1,8}$/i.test(req.path) && !req.path.endsWith('.html'))
+      ) {
+        return next();
+      }
+      try {
+        if (!cachedDistHtml) {
+          cachedDistHtml = fs.readFileSync(distIndexPath, 'utf-8');
+        }
+        const html = injectSeoIntoHtml(cachedDistHtml, req.path);
+        res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
+      } catch (err) {
+        console.error('Error injecting SEO HTML:', err);
+        res.sendFile(distIndexPath);
+      }
     });
   }
 
