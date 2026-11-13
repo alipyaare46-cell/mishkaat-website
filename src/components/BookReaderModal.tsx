@@ -32,14 +32,77 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.10.38'}/pdf.worker.min.mjs`;
 }
 
+export type HighlightColor = 'gold' | 'emerald' | 'blue' | 'rose';
+
 export interface BookStudyNote {
   id: string;
   pageNumber: number;
-  color: 'gold' | 'emerald' | 'blue' | 'rose';
+  color: HighlightColor;
   highlightSnippet?: string;
   noteText: string;
   createdAt: string;
 }
+
+export interface BookPageHighlight {
+  id: string;
+  pageNumber: number;
+  color: HighlightColor;
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
+  width: number; // percentage 0-100
+  height: number; // percentage 0-100
+  createdAt: string;
+}
+
+const HIGHLIGHT_STYLES: Record<
+  HighlightColor,
+  {
+    label: string;
+    swatchClass: string;
+    overlayBg: string;
+    overlayBorder: string;
+    cardClass: string;
+    snippetClass: string;
+    badgeClass: string;
+  }
+> = {
+  gold: {
+    label: 'Gold',
+    swatchClass: 'bg-amber-400 border-amber-200',
+    overlayBg: 'rgba(250, 204, 21, 0.42)',
+    overlayBorder: 'rgba(217, 119, 6, 0.75)',
+    cardClass: 'border-l-amber-400 bg-amber-500/10',
+    snippetClass: 'bg-amber-400/25 border-l-4 border-amber-400 text-amber-100',
+    badgeClass: 'bg-amber-400/25 text-amber-200 border-amber-400/40'
+  },
+  emerald: {
+    label: 'Emerald',
+    swatchClass: 'bg-emerald-400 border-emerald-200',
+    overlayBg: 'rgba(52, 211, 153, 0.38)',
+    overlayBorder: 'rgba(16, 185, 129, 0.75)',
+    cardClass: 'border-l-emerald-400 bg-emerald-500/10',
+    snippetClass: 'bg-emerald-400/25 border-l-4 border-emerald-400 text-emerald-100',
+    badgeClass: 'bg-emerald-400/25 text-emerald-200 border-emerald-400/40'
+  },
+  blue: {
+    label: 'Blue',
+    swatchClass: 'bg-sky-400 border-sky-200',
+    overlayBg: 'rgba(56, 189, 248, 0.38)',
+    overlayBorder: 'rgba(14, 165, 233, 0.75)',
+    cardClass: 'border-l-sky-400 bg-sky-500/10',
+    snippetClass: 'bg-sky-400/25 border-l-4 border-sky-400 text-sky-100',
+    badgeClass: 'bg-sky-400/25 text-sky-200 border-sky-400/40'
+  },
+  rose: {
+    label: 'Rose',
+    swatchClass: 'bg-rose-400 border-rose-200',
+    overlayBg: 'rgba(251, 113, 133, 0.38)',
+    overlayBorder: 'rgba(244, 63, 94, 0.75)',
+    cardClass: 'border-l-rose-400 bg-rose-500/10',
+    snippetClass: 'bg-rose-400/25 border-l-4 border-rose-400 text-rose-100',
+    badgeClass: 'bg-rose-400/25 text-rose-200 border-rose-400/40'
+  }
+};
 
 interface BookReaderModalProps {
   book: Book | null;
@@ -55,11 +118,14 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
   const [showNotesDrawer, setShowNotesDrawer] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
 
-  // Study Notes & Highlights State
+  // Study Notes & Visual Page Highlights State
   const [notes, setNotes] = useState<BookStudyNote[]>([]);
+  const [pageHighlights, setPageHighlights] = useState<BookPageHighlight[]>([]);
+  const [isHighlightMode, setIsHighlightMode] = useState(false);
+  const [dragBox, setDragBox] = useState<{ startX: number; startY: number; currX: number; currY: number } | null>(null);
   const [newNoteText, setNewNoteText] = useState('');
   const [newSnippet, setNewSnippet] = useState('');
-  const [selectedColor, setSelectedColor] = useState<'gold' | 'emerald' | 'blue' | 'rose'>('gold');
+  const [selectedColor, setSelectedColor] = useState<HighlightColor>('gold');
   const [notesFilter, setNotesFilter] = useState<'all' | 'page'>('all');
   const [copiedNoteId, setCopiedNoteId] = useState<string | null>(null);
 
@@ -72,6 +138,7 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const pageWrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<any>(null);
 
@@ -251,22 +318,29 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
     }
   };
 
-  // LocalStorage persistence for Study Notes
+  // LocalStorage persistence for Study Notes & Page Highlights
   const storageKey = book ? `mishkaat_book_notes_${book.id}` : '';
+  const highlightsStorageKey = book ? `mishkaat_book_highlights_${book.id}` : '';
 
   useEffect(() => {
     if (!storageKey) return;
     try {
       const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        setNotes(JSON.parse(saved));
-      } else {
-        setNotes([]);
-      }
-    } catch (e) {
+      setNotes(saved ? JSON.parse(saved) : []);
+    } catch {
       setNotes([]);
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!highlightsStorageKey) return;
+    try {
+      const saved = localStorage.getItem(highlightsStorageKey);
+      setPageHighlights(saved ? JSON.parse(saved) : []);
+    } catch {
+      setPageHighlights([]);
+    }
+  }, [highlightsStorageKey]);
 
   const saveNotesToStorage = (updatedNotes: BookStudyNote[]) => {
     setNotes(updatedNotes);
@@ -277,6 +351,79 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
         console.warn('Could not save notes:', e);
       }
     }
+  };
+
+  const saveHighlightsToStorage = (updatedHighlights: BookPageHighlight[]) => {
+    setPageHighlights(updatedHighlights);
+    if (highlightsStorageKey) {
+      try {
+        localStorage.setItem(highlightsStorageKey, JSON.stringify(updatedHighlights));
+      } catch (e) {
+        console.warn('Could not save page highlights:', e);
+      }
+    }
+  };
+
+  const getRelativePercentCoords = (clientX: number, clientY: number) => {
+    const el = pageWrapperRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+    return { x, y };
+  };
+
+  const handleHighlightPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isHighlightMode) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const coords = getRelativePercentCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    setDragBox({ startX: coords.x, startY: coords.y, currX: coords.x, currY: coords.y });
+  };
+
+  const handleHighlightPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isHighlightMode || !dragBox) return;
+    const coords = getRelativePercentCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    setDragBox((prev) => (prev ? { ...prev, currX: coords.x, currY: coords.y } : null));
+  };
+
+  const handleHighlightPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isHighlightMode || !dragBox) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    const left = Math.min(dragBox.startX, dragBox.currX);
+    const top = Math.min(dragBox.startY, dragBox.currY);
+    const width = Math.abs(dragBox.currX - dragBox.startX);
+    const height = Math.abs(dragBox.currY - dragBox.startY);
+    setDragBox(null);
+
+    // Ignore accidental tiny clicks without dragging; enforce minimum strip height if dragged horizontally
+    if (width < 1.5 && height < 1.0) return;
+
+    const newHighlight: BookPageHighlight = {
+      id: 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      pageNumber: currentPage,
+      color: selectedColor,
+      x: left,
+      y: top,
+      width: Math.max(width, 2),
+      height: Math.max(height, 2.2),
+      createdAt: new Date().toISOString()
+    };
+
+    saveHighlightsToStorage([...pageHighlights, newHighlight]);
+  };
+
+  const handleDeleteHighlight = (id: string) => {
+    saveHighlightsToStorage(pageHighlights.filter((h) => h.id !== id));
+  };
+
+  const handleClearCurrentPageHighlights = () => {
+    saveHighlightsToStorage(pageHighlights.filter((h) => h.pageNumber !== currentPage));
   };
 
   const handleAddNote = (e: React.FormEvent) => {
@@ -302,6 +449,11 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
     setNewSnippet('');
   };
 
+  const handleChangeNoteColor = (noteId: string, color: HighlightColor) => {
+    const updated = notes.map((n) => (n.id === noteId ? { ...n, color } : n));
+    saveNotesToStorage(updated);
+  };
+
   const handleDeleteNote = (id: string) => {
     const updated = notes.filter((n) => n.id !== id);
     saveNotesToStorage(updated);
@@ -316,6 +468,7 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
     setTimeout(() => setCopiedNoteId(null), 2000);
   };
 
+  const highlightsForCurrentPage = pageHighlights.filter((h) => h.pageNumber === currentPage);
   const notesForCurrentPage = notes.filter((n) => n.pageNumber === currentPage);
   const displayedNotes = notesFilter === 'page' ? notesForCurrentPage : notes;
 
@@ -422,6 +575,51 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
               </div>
             )}
 
+            {/* Interactive Page Highlighter Mode + Color Picker */}
+            {numPages > 0 && (
+              <div className="flex items-center gap-1 bg-stone-800 rounded-lg border border-white/10 px-1.5 py-1">
+                <button
+                  type="button"
+                  onClick={() => setIsHighlightMode(!isHighlightMode)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                    isHighlightMode
+                      ? 'bg-[#D4AF37] text-stone-950 shadow-xs'
+                      : 'text-stone-300 hover:text-white hover:bg-stone-700'
+                  }`}
+                  title={
+                    isHighlightMode
+                      ? 'Highlight Mode ON — Drag on page to highlight text'
+                      : 'Turn ON Page Highlighter'
+                  }
+                >
+                  <Highlighter className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">
+                    {isHighlightMode ? 'Highlighting' : 'Highlight'}
+                  </span>
+                </button>
+                <div className="flex items-center gap-1 pl-1 border-l border-white/10">
+                  {(['gold', 'emerald', 'blue', 'rose'] as const).map((clr) => (
+                    <button
+                      key={clr}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(clr);
+                        setIsHighlightMode(true);
+                      }}
+                      className={`w-3.5 h-3.5 rounded-full transition-transform cursor-pointer border ${
+                        HIGHLIGHT_STYLES[clr].swatchClass
+                      } ${
+                        selectedColor === clr
+                          ? 'scale-125 ring-2 ring-white shadow-sm'
+                          : 'opacity-65 hover:opacity-100'
+                      }`}
+                      title={`Highlight with ${HIGHLIGHT_STYLES[clr].label}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Highlights & Study Notes Toggle Button */}
             <button
               onClick={() => {
@@ -435,7 +633,7 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
               }`}
               title="Kitab Ke Hawashi Aur Notes (حواشی و نوٹس)"
             >
-              <Highlighter className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <FileText className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span className="hidden sm:inline">Notes</span>
               {notes.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.2 bg-[#D4AF37] text-stone-950 text-[10px] font-black rounded-full shadow-xs">
@@ -551,24 +749,130 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
               </div>
             ) : numPages > 0 ? (
               <div className="relative flex flex-col items-center justify-start my-auto">
-                <div className="bg-white rounded-lg shadow-2xl overflow-hidden border border-white/20 transition-all duration-150 relative">
+                {/* Active Highlighter Helper Banner */}
+                {isHighlightMode && (
+                  <div className="mb-3 px-3.5 py-1.5 rounded-full bg-stone-900/95 border border-[#D4AF37]/60 text-xs text-stone-100 flex items-center gap-2.5 shadow-lg">
+                    <span
+                      className={`w-3 h-3 rounded-full border ${HIGHLIGHT_STYLES[selectedColor].swatchClass}`}
+                    />
+                    <span>
+                      <strong>{HIGHLIGHT_STYLES[selectedColor].label} Highlighter ON:</strong> کتاب کے صفحے پر انگلی یا ماؤس سے کھینچ کر ہائی لائٹ کریں
+                    </span>
+                    {highlightsForCurrentPage.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearCurrentPageHighlights}
+                        className="ml-1 px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-600 text-white text-[10px] font-bold cursor-pointer"
+                      >
+                        Clear Page
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsHighlightMode(false)}
+                      className="px-2 py-0.5 rounded bg-stone-700 hover:bg-stone-600 text-white text-[10px] font-bold cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                )}
+
+                <div
+                  ref={pageWrapperRef}
+                  className={`bg-white rounded-lg shadow-2xl overflow-hidden border border-white/20 transition-all duration-150 relative ${
+                    isHighlightMode ? 'cursor-crosshair ring-2 ring-[#D4AF37]' : ''
+                  }`}
+                >
                   <canvas ref={canvasRef} className="block max-w-full h-auto mx-auto" />
+
+                  {/* Saved Page Highlights Layer */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    {highlightsForCurrentPage.map((hl) => {
+                      const style = HIGHLIGHT_STYLES[hl.color] || HIGHLIGHT_STYLES.gold;
+                      return (
+                        <div
+                          key={hl.id}
+                          style={{
+                            left: `${hl.x}%`,
+                            top: `${hl.y}%`,
+                            width: `${hl.width}%`,
+                            height: `${hl.height}%`,
+                            backgroundColor: style.overlayBg,
+                            borderBottom: `2px solid ${style.overlayBorder}`
+                          }}
+                          className="absolute rounded-xs mix-blend-multiply group pointer-events-auto"
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteHighlight(hl.id);
+                            }}
+                            title="Remove highlight"
+                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-stone-900 text-white hover:bg-rose-600 flex items-center justify-center text-[10px] font-bold shadow-md transition-opacity cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Live Drag Preview Box */}
+                    {dragBox && (
+                      <div
+                        style={{
+                          left: `${Math.min(dragBox.startX, dragBox.currX)}%`,
+                          top: `${Math.min(dragBox.startY, dragBox.currY)}%`,
+                          width: `${Math.abs(dragBox.currX - dragBox.startX)}%`,
+                          height: `${Math.max(Math.abs(dragBox.currY - dragBox.startY), 2.2)}%`,
+                          backgroundColor: HIGHLIGHT_STYLES[selectedColor].overlayBg,
+                          border: `1.5px dashed ${HIGHLIGHT_STYLES[selectedColor].overlayBorder}`
+                        }}
+                        className="absolute rounded-xs mix-blend-multiply"
+                      />
+                    )}
+                  </div>
+
+                  {/* Interactive Pointer Capture Layer when Highlight Mode is Active */}
+                  {isHighlightMode && (
+                    <div
+                      onPointerDown={handleHighlightPointerDown}
+                      onPointerMove={handleHighlightPointerMove}
+                      onPointerUp={handleHighlightPointerUp}
+                      onPointerCancel={() => setDragBox(null)}
+                      className="absolute inset-0 z-10 touch-none cursor-crosshair"
+                    />
+                  )}
                 </div>
 
-                {/* Quick Page Notes Notification Badge */}
-                {notesForCurrentPage.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setShowNotesDrawer(true);
-                      setNotesFilter('page');
-                      if (showInfoSidebar) setShowInfoSidebar(false);
-                    }}
-                    className="mt-3 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#064E3B]/90 hover:bg-[#064E3B] text-emerald-100 border border-emerald-500/50 text-xs font-semibold shadow-lg backdrop-blur-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-                  >
-                    <Highlighter className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    <span>اس صفحہ ({currentPage}) پر {notesForCurrentPage.length} حاشیہ/نوٹ موجود ہیں • کھولیں</span>
-                  </button>
-                )}
+                {/* Quick Page Notes & Highlights Status Badges */}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  {highlightsForCurrentPage.length > 0 && !isHighlightMode && (
+                    <button
+                      type="button"
+                      onClick={handleClearCurrentPageHighlights}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-800/90 hover:bg-rose-900/90 text-stone-200 border border-white/15 text-[11px] font-semibold shadow-md transition-colors cursor-pointer"
+                      title="Clear all highlights on this page"
+                    >
+                      <Trash2 className="w-3 h-3 text-rose-400" />
+                      <span>{highlightsForCurrentPage.length} Highlight(s) on Page {currentPage} • Clear</span>
+                    </button>
+                  )}
+
+                  {notesForCurrentPage.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowNotesDrawer(true);
+                        setNotesFilter('page');
+                        if (showInfoSidebar) setShowInfoSidebar(false);
+                      }}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#064E3B]/90 hover:bg-[#064E3B] text-emerald-100 border border-emerald-500/50 text-xs font-semibold shadow-lg backdrop-blur-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                      <Highlighter className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <span>اس صفحہ ({currentPage}) پر {notesForCurrentPage.length} حاشیہ/نوٹ موجود ہیں • کھولیں</span>
+                    </button>
+                  )}
+                </div>
 
                 {/* Floating Mobile Page Quick Buttons */}
                 <div className="sm:hidden flex items-center justify-center gap-3 mt-4 py-2 px-4 bg-stone-900/90 rounded-full border border-white/10 shadow-lg">
@@ -727,25 +1031,21 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
                     </span>
                     {/* Color Picker */}
                     <div className="flex items-center gap-1.5">
-                      {(['gold', 'emerald', 'blue', 'rose'] as const).map((clr) => {
-                        const clrMap = {
-                          gold: 'bg-[#D4AF37] border-amber-300',
-                          emerald: 'bg-emerald-500 border-emerald-300',
-                          blue: 'bg-sky-500 border-sky-300',
-                          rose: 'bg-rose-500 border-rose-300'
-                        };
-                        return (
-                          <button
-                            key={clr}
-                            type="button"
-                            onClick={() => setSelectedColor(clr)}
-                            className={`w-4 h-4 rounded-full transition-transform cursor-pointer border ${clrMap[clr]} ${
-                              selectedColor === clr ? 'scale-125 ring-2 ring-white shadow-md' : 'opacity-60 hover:opacity-100'
-                            }`}
-                            title={clr}
-                          />
-                        );
-                      })}
+                      {(['gold', 'emerald', 'blue', 'rose'] as const).map((clr) => (
+                        <button
+                          key={clr}
+                          type="button"
+                          onClick={() => setSelectedColor(clr)}
+                          className={`w-4 h-4 rounded-full transition-transform cursor-pointer border ${
+                            HIGHLIGHT_STYLES[clr].swatchClass
+                          } ${
+                            selectedColor === clr
+                              ? 'scale-125 ring-2 ring-white shadow-md'
+                              : 'opacity-60 hover:opacity-100'
+                          }`}
+                          title={`Select ${HIGHLIGHT_STYLES[clr].label} highlight color`}
+                        />
+                      ))}
                     </div>
                   </div>
 
@@ -828,35 +1128,46 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
                 ) : (
                   <div className="space-y-2.5">
                     {displayedNotes.map((n) => {
-                      const colorBorderMap = {
-                        gold: 'border-l-[#D4AF37] bg-amber-950/20',
-                        emerald: 'border-l-emerald-400 bg-emerald-950/20',
-                        blue: 'border-l-sky-400 bg-sky-950/20',
-                        rose: 'border-l-rose-400 bg-rose-950/20'
-                      };
+                      const style = HIGHLIGHT_STYLES[n.color] || HIGHLIGHT_STYLES.gold;
                       return (
                         <div
                           key={n.id}
-                          className={`p-3 rounded-xl border border-white/10 border-l-4 transition-all hover:border-white/20 shadow-xs ${
-                            colorBorderMap[n.color] || colorBorderMap.gold
-                          }`}
+                          className={`p-3 rounded-xl border border-white/10 border-l-4 transition-all hover:border-white/20 shadow-xs ${style.cardClass}`}
                         >
-                          <div className="flex items-center justify-between mb-1.5">
-                            <button
-                              type="button"
-                              onClick={() => goToPage(n.pageNumber)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-stone-800 hover:bg-[#D4AF37] hover:text-stone-950 text-stone-200 text-[10px] font-mono font-bold transition-colors cursor-pointer border border-white/10"
-                              title={`Jump to Page ${n.pageNumber}`}
-                            >
-                              <span>Page {n.pageNumber}</span>
-                              <span className="text-[9px] opacity-70">↗</span>
-                            </button>
-                            <div className="flex items-center gap-1.5 text-stone-400">
-                              <span className="text-[10px]">{n.createdAt}</span>
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => goToPage(n.pageNumber)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-stone-800 hover:bg-[#D4AF37] hover:text-stone-950 text-stone-200 text-[10px] font-mono font-bold transition-colors cursor-pointer border border-white/10"
+                                title={`Jump to Page ${n.pageNumber}`}
+                              >
+                                <span>Page {n.pageNumber}</span>
+                                <span className="text-[9px] opacity-70">↗</span>
+                              </button>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${style.badgeClass}`}
+                              >
+                                {style.label}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-stone-400">
+                              {/* Quick color re-assign dots */}
+                              {(['gold', 'emerald', 'blue', 'rose'] as const).map((clr) => (
+                                <button
+                                  key={clr}
+                                  type="button"
+                                  onClick={() => handleChangeNoteColor(n.id, clr)}
+                                  title={`Change highlight color to ${HIGHLIGHT_STYLES[clr].label}`}
+                                  className={`w-2.5 h-2.5 rounded-full cursor-pointer border transition-transform ${
+                                    HIGHLIGHT_STYLES[clr].swatchClass
+                                  } ${n.color === clr ? 'scale-125 ring-1 ring-white' : 'opacity-45 hover:opacity-100'}`}
+                                />
+                              ))}
                               <button
                                 type="button"
                                 onClick={() => handleCopyNote(n)}
-                                className="p-1 hover:text-white transition-colors cursor-pointer rounded"
+                                className="p-1 ml-1 hover:text-white transition-colors cursor-pointer rounded"
                                 title="Copy note text"
                               >
                                 {copiedNoteId === n.id ? (
@@ -877,7 +1188,9 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
                           </div>
 
                           {n.highlightSnippet && (
-                            <div className="mb-2 p-2 rounded bg-black/40 border-l-2 border-stone-400 text-xs italic text-stone-200 font-serif">
+                            <div
+                              className={`mb-2 px-2.5 py-2 rounded-lg text-xs italic font-serif leading-relaxed ${style.snippetClass}`}
+                            >
                               &ldquo;{n.highlightSnippet}&rdquo;
                             </div>
                           )}

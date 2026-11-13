@@ -3,7 +3,7 @@ import { Shield, Lock, User, AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert }
 import { useAuth } from '../../context/AuthContext';
 
 import { api } from '../../services/api';
-import emblemImg from '../../assets/images/mishkaat_brand_emblem_1793182102461.jpg';
+import emblemImg from '../../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 interface AdminLoginProps {
   onBackToPublic: () => void;

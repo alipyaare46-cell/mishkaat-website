@@ -3,7 +3,7 @@ import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as
 import { Reel, Scholar } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
-import { extractYouTubeThumbnail } from '../../utils/media';
+import { extractYouTubeThumbnail, isInstagramUrl, getInstagramEmbedUrl } from '../../utils/media';
 
 interface AdminReelsProps {
   reels: Reel[];
@@ -544,11 +544,11 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                   </div>
                 )}
 
-                {/* Option 2: Link / MP4 URL */}
+                {/* Option 2: Link / MP4 / YouTube / Instagram URL */}
                 {videoSourceType === 'url' && (
                   <div className="space-y-2">
                     <label className="block text-xs font-semibold text-stone-700">
-                      Direct MP4 URL or YouTube Shorts URL
+                      Direct MP4 URL, YouTube Shorts, or Instagram Reel URL
                     </label>
                     <input
                       type="text"
@@ -563,7 +563,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                         }
                       }}
                       className="w-full px-3 py-2 text-xs border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#064E3B] bg-white font-mono"
-                      placeholder="https://example.com/videos/reel1.mp4 or https://youtube.com/shorts/..."
+                      placeholder="https://youtube.com/shorts/... or https://www.instagram.com/reel/..."
                     />
                     {extractYouTubeThumbnail(videoUrl) && (
                       <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
@@ -571,8 +571,18 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                         <span>YouTube Shorts/Video recognized. Thumbnail auto-synced!</span>
                       </p>
                     )}
+                    {isInstagramUrl(videoUrl) && (
+                      <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>
+                          {getInstagramEmbedUrl(videoUrl)
+                            ? 'Instagram Reel / Video recognized & ready to embed!'
+                            : 'Instagram link detected — please use a direct /reel/ or /p/ URL.'}
+                        </span>
+                      </p>
+                    )}
                     <p className="text-[10px] text-stone-500 mt-1">
-                      Paste a direct link to an MP4 video or a public YouTube Shorts link.
+                      Paste a direct link to an MP4 video, YouTube Shorts, or public Instagram Reel / Post link.
                     </p>
                   </div>
                 )}
@@ -597,12 +607,26 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                       </button>
                     </div>
 
-                    <div className="max-w-[200px] mx-auto aspect-9/16 bg-black rounded-lg overflow-hidden border border-stone-300 shadow-sm flex items-center justify-center">
+                    <div className="max-w-[220px] mx-auto aspect-9/16 bg-black rounded-lg overflow-hidden border border-stone-300 shadow-sm flex items-center justify-center">
                       {videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be') ? (
                         <div className="p-3 text-center text-white text-[11px]">
                           <Film className="w-6 h-6 text-[#D4AF37] mx-auto mb-1" />
                           <span>YouTube Reel Linked</span>
                         </div>
+                      ) : isInstagramUrl(videoUrl) ? (
+                        getInstagramEmbedUrl(videoUrl) ? (
+                          <iframe
+                            src={getInstagramEmbedUrl(videoUrl)!}
+                            title="Instagram Reel Preview"
+                            className="w-full h-full border-0 bg-white"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div className="p-3 text-center text-white text-[11px]">
+                            <Film className="w-6 h-6 text-[#D4AF37] mx-auto mb-1" />
+                            <span>Instagram Reel Linked</span>
+                          </div>
+                        )
                       ) : (
                         <video
                           src={videoUrl}

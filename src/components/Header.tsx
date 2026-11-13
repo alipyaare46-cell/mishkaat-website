@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Menu, X, Shield, BookOpen, Volume2, Film, FileText, Quote, Feather, Globe, User as UserIcon, Bookmark, Mail } from 'lucide-react';
-import emblemImg from '../assets/images/mishkaat_brand_emblem_1793182102461.jpg';
+import emblemImg from '../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { PwaInstallButton } from './PwaInstallButton';

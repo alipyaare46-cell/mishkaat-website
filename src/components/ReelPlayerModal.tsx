@@ -25,7 +25,7 @@ import { useUserAuth } from '../context/UserAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
-import { extractYouTubeId } from '../utils/media';
+import { extractYouTubeId, isInstagramUrl, getInstagramEmbedUrl } from '../utils/media';
 
 interface ReelPlayerModalProps {
   reel: Reel | null;
@@ -248,6 +248,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   if (!initialReel || !currentReel) return null;
 
   const isYouTube = currentReel.video_url.includes('youtube.com') || currentReel.video_url.includes('youtu.be');
+  const isInstagram = !isYouTube && isInstagramUrl(currentReel.video_url);
+  const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(currentReel.video_url) : null;
 
   const getYouTubeEmbed = (url: string) => {
     const videoId = extractYouTubeId(url);
@@ -361,50 +363,68 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 relative">
-            {/* Fit / Crop Mode Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsFitMode(!isFitMode)}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
-                isFitMode
-                  ? 'bg-[#064E3B] text-white border-emerald-500'
-                  : 'bg-black/50 hover:bg-black/70 text-stone-300 border-white/15'
-              }`}
-              title={isFitMode ? 'Fit View (No video cutoff)' : 'Full Fill (Cropped)'}
-            >
-              {isFitMode ? 'Fit 📐' : 'Fill 🔲'}
-            </button>
-
-            {/* Speed Selector Toggle */}
-            <div className="relative">
+            {/* Fit / Crop Mode Toggle (only for native video) */}
+            {!isYouTube && !isInstagram && (
               <button
                 type="button"
-                onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                className="px-2 py-1 rounded-md bg-black/50 hover:bg-black/70 text-[11px] font-bold text-[#D4AF37] border border-white/15 transition-colors cursor-pointer"
-                title="Playback Speed"
+                onClick={() => setIsFitMode(!isFitMode)}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                  isFitMode
+                    ? 'bg-[#064E3B] text-white border-emerald-500'
+                    : 'bg-black/50 hover:bg-black/70 text-stone-300 border-white/15'
+                }`}
+                title={isFitMode ? 'Fit View (No video cutoff)' : 'Full Fill (Cropped)'}
               >
-                {playbackSpeed}x
+                {isFitMode ? 'Fit 📐' : 'Fill 🔲'}
               </button>
-              {showSpeedMenu && (
-                <div className="absolute top-8 right-0 bg-stone-900 border border-white/20 rounded-xl p-1.5 shadow-2xl flex flex-col gap-1 z-40 min-w-[70px]">
-                  {[0.75, 1, 1.25, 1.5, 2].map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      onClick={() => handleSpeedChange(spd)}
-                      className={`px-2 py-1 text-[11px] font-semibold rounded text-left transition-colors cursor-pointer ${
-                        playbackSpeed === spd ? 'bg-[#064E3B] text-white font-bold' : 'text-stone-300 hover:bg-white/10'
-                      }`}
-                    >
-                      {spd}x
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
 
-            {/* Direct Download Button */}
-            {!isYouTube && currentReel.video_url && (
+            {/* Speed Selector Toggle (native video & YouTube) */}
+            {!isInstagram && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+                  className="px-2 py-1 rounded-md bg-black/50 hover:bg-black/70 text-[11px] font-bold text-[#D4AF37] border border-white/15 transition-colors cursor-pointer"
+                  title="Playback Speed"
+                >
+                  {playbackSpeed}x
+                </button>
+                {showSpeedMenu && (
+                  <div className="absolute top-8 right-0 bg-stone-900 border border-white/20 rounded-xl p-1.5 shadow-2xl flex flex-col gap-1 z-40 min-w-[70px]">
+                    {[0.75, 1, 1.25, 1.5, 2].map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        onClick={() => handleSpeedChange(spd)}
+                        className={`px-2 py-1 text-[11px] font-semibold rounded text-left transition-colors cursor-pointer ${
+                          playbackSpeed === spd ? 'bg-[#064E3B] text-white font-bold' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {spd}x
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Open on Instagram fallback link */}
+            {isInstagram && currentReel.video_url && (
+              <a
+                href={currentReel.video_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded-full bg-gradient-to-r from-fuchsia-600 to-amber-500 hover:opacity-90 text-white text-[11px] font-bold flex items-center gap-1 transition-opacity cursor-pointer shadow-xs"
+                title="Open Original on Instagram"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Instagram</span>
+              </a>
+            )}
+
+            {/* Direct Download Button (only for direct video files) */}
+            {!isYouTube && !isInstagram && currentReel.video_url && (
               <a
                 href={currentReel.video_url}
                 download
@@ -415,7 +435,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </a>
             )}
 
-            {!isYouTube && (
+            {!isYouTube && !isInstagram && (
               <button
                 type="button"
                 onClick={toggleMute}
@@ -452,28 +472,30 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
         {/* Video Player Area */}
         <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-          {/* On-screen Rewind -10s and Forward +10s controls for ALL videos (including YouTube links) */}
-          <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-20">
-            <button
-              type="button"
-              onClick={() => skipTime(-10)}
-              className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
-              title="Rewind 10 seconds (-10s)"
-            >
-              <RotateCcw className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-[9px] font-mono font-bold mt-0.5">-10s</span>
-            </button>
+          {/* On-screen Rewind -10s and Forward +10s controls (for native video & YouTube links) */}
+          {!isInstagram && (
+            <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-20">
+              <button
+                type="button"
+                onClick={() => skipTime(-10)}
+                className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
+                title="Rewind 10 seconds (-10s)"
+              >
+                <RotateCcw className="w-5 h-5 text-[#D4AF37]" />
+                <span className="text-[9px] font-mono font-bold mt-0.5">-10s</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => skipTime(10)}
-              className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
-              title="Fast forward 10 seconds (+10s)"
-            >
-              <RotateCw className="w-5 h-5 text-[#D4AF37]" />
-              <span className="text-[9px] font-mono font-bold mt-0.5">+10s</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => skipTime(10)}
+                className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
+                title="Fast forward 10 seconds (+10s)"
+              >
+                <RotateCw className="w-5 h-5 text-[#D4AF37]" />
+                <span className="text-[9px] font-mono font-bold mt-0.5">+10s</span>
+              </button>
+            </div>
+          )}
 
           {isYouTube ? (
             <iframe
@@ -488,6 +510,33 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
                 sendYouTubeCommand('listening');
               }}
             />
+          ) : isInstagram ? (
+            instagramEmbedUrl ? (
+              <div className="w-full h-full bg-white flex items-center justify-center pt-10 pb-24">
+                <iframe
+                  key={currentReel.id}
+                  src={instagramEmbedUrl}
+                  title={currentReel.title || 'Instagram Reel'}
+                  className="w-full h-full border-0 bg-white"
+                  allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <div className="p-6 text-center space-y-3">
+                <Play className="w-10 h-10 text-[#D4AF37] mx-auto" />
+                <p className="text-xs text-stone-300">Open this Instagram Reel directly in Instagram</p>
+                <a
+                  href={currentReel.video_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-fuchsia-600 to-amber-500 text-white text-xs font-bold"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Watch on Instagram ↗</span>
+                </a>
+              </div>
+            )
           ) : (
             <video
               key={currentReel.id}
@@ -509,7 +558,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           )}
 
           {/* Central Play/Pause Flash Overlay */}
-          {!isYouTube && !isPlaying && (
+          {!isYouTube && !isInstagram && !isPlaying && (
             <button
               onClick={togglePlay}
               className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white pointer-events-auto cursor-pointer border border-white/20"

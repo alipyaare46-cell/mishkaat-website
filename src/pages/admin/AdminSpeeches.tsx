@@ -3,7 +3,7 @@ import { Volume2, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link
 import { Speech, Scholar } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
-import { extractYouTubeThumbnail } from '../../utils/media';
+import { extractYouTubeThumbnail, isInstagramUrl, getInstagramEmbedUrl } from '../../utils/media';
 
 interface AdminSpeechesProps {
   speeches: Speech[];
@@ -598,7 +598,7 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                 {mediaSourceType === 'url' && (
                   <div className="space-y-2">
                     <label className="block text-xs font-semibold text-stone-700">
-                      Direct MP4 / MP3 URL or YouTube Link
+                      Direct MP4 / MP3 URL, YouTube, or Instagram Link
                     </label>
                     <input
                       type="text"
@@ -613,7 +613,7 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                         }
                       }}
                       className="w-full px-3 py-2 text-xs border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#064E3B] bg-white font-mono"
-                      placeholder="https://example.com/speech.mp4 or https://youtube.com/watch?v=..."
+                      placeholder="https://youtube.com/watch?v=... or https://www.instagram.com/reel/..."
                     />
                     {extractYouTubeThumbnail(mediaUrl) && (
                       <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
@@ -621,8 +621,18 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                         <span>YouTube video recognized. Thumbnail auto-synced & ready for Home Page!</span>
                       </p>
                     )}
+                    {isInstagramUrl(mediaUrl) && (
+                      <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>
+                          {getInstagramEmbedUrl(mediaUrl)
+                            ? 'Instagram Reel / Video recognized & ready to embed!'
+                            : 'Instagram link detected — please use a direct /reel/ or /p/ URL.'}
+                        </span>
+                      </p>
+                    )}
                     <p className="text-[10px] text-stone-500 mt-1">
-                      Paste a direct link to an MP4 video, MP3 audio, or public YouTube discourse. (Will appear immediately under Videos & Speeches on Home Page)
+                      Paste a direct link to an MP4 video, MP3 audio, public YouTube link, or Instagram Reel/Post link.
                     </p>
                   </div>
                 )}
@@ -653,6 +663,20 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                           <Volume2 className="w-6 h-6 text-[#D4AF37] mx-auto mb-1" />
                           <span>YouTube Speech Linked</span>
                         </div>
+                      ) : isInstagramUrl(mediaUrl) ? (
+                        getInstagramEmbedUrl(mediaUrl) ? (
+                          <iframe
+                            src={getInstagramEmbedUrl(mediaUrl)!}
+                            title="Instagram Speech Preview"
+                            className="w-full max-w-xs h-72 border-0 rounded bg-white"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div className="p-3 text-center text-white text-[11px]">
+                            <Volume2 className="w-6 h-6 text-[#D4AF37] mx-auto mb-1" />
+                            <span>Instagram Link Linked</span>
+                          </div>
+                        )
                       ) : /\.(mp4|webm|mov|m4v|mkv)($|\?)/i.test(mediaUrl) ? (
                         <video
                           src={mediaUrl}

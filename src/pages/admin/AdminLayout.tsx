@@ -29,7 +29,7 @@ import { AdminShayariyan } from './AdminShayariyan';
 import { AdminContactMessages } from './AdminContactMessages';
 import { AdminSettings } from './AdminSettings';
 import { AdminSecurity } from './AdminSecurity';
-import emblemImg from '../../assets/images/mishkaat_brand_emblem_1793182102461.jpg';
+import emblemImg from '../../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 
 interface AdminLayoutProps {

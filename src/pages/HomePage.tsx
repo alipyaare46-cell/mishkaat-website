@@ -2,7 +2,7 @@ import React from 'react';
 import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, ArrowRight, Play, ExternalLink, Calendar, Clock, Bookmark } from 'lucide-react';
 import { Scholar, Speech, Reel, Book, Article, Aqwaal, Shayariyan, WebsiteSettings, WebsiteStats } from '../types';
 import madinahHeroImg from '../assets/images/madinah_munawwarah_hero_1793189667524.jpg';
-import emblemImg from '../assets/images/mishkaat_brand_emblem_1793182102461.jpg';
+import emblemImg from '../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 import { useLanguage } from '../context/LanguageContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { resolveMediaThumbnail, isVideoMedia } from '../utils/media';

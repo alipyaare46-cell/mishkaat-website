@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, Smartphone, Laptop, Check, X, Share, ExternalLink, Copy } from 'lucide-react';
-import emblemImg from '../assets/images/mishkaat_brand_emblem_1793182102461.jpg';
+import emblemImg from '../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 interface PwaInstallButtonProps {
   variant?: 'header' | 'banner' | 'menu';

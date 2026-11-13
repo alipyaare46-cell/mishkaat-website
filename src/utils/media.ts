@@ -1,4 +1,4 @@
-// Utility helpers for media, video URLs, and YouTube thumbnail extraction
+// Utility helpers for media, video URLs, YouTube & Instagram parsing, and thumbnail extraction
 
 export function extractYouTubeId(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -40,11 +40,57 @@ export function extractYouTubeThumbnail(url: string | null | undefined): string 
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
 }
 
+export interface InstagramMediaInfo {
+  type: 'reel' | 'p' | 'tv';
+  code: string;
+  embedUrl: string;
+  canonicalUrl: string;
+}
+
+export function extractInstagramInfo(url: string | null | undefined): InstagramMediaInfo | null {
+  if (!url) return null;
+  const cleanUrl = url.trim();
+
+  // Matches:
+  // https://www.instagram.com/reel/CODE/
+  // https://www.instagram.com/reels/CODE/
+  // https://www.instagram.com/p/CODE/
+  // https://www.instagram.com/tv/CODE/
+  // https://www.instagram.com/username/reel/CODE/
+  // https://instagr.am/p/CODE/
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:[A-Za-z0-9._]+\/)?(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i;
+  const match = cleanUrl.match(regex);
+  if (!match || !match[1] || !match[2]) {
+    return null;
+  }
+
+  const rawType = match[1].toLowerCase();
+  const type: 'reel' | 'p' | 'tv' = rawType === 'reels' ? 'reel' : (rawType as 'reel' | 'p' | 'tv');
+  const code = match[2];
+
+  return {
+    type,
+    code,
+    embedUrl: `https://www.instagram.com/${type}/${code}/embed/`,
+    canonicalUrl: `https://www.instagram.com/${type}/${code}/`
+  };
+}
+
+export function getInstagramEmbedUrl(url: string | null | undefined): string | null {
+  return extractInstagramInfo(url)?.embedUrl || null;
+}
+
+export function isInstagramUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return !!extractInstagramInfo(url) || /instagram\.com|instagr\.am/i.test(url);
+}
+
 export function isVideoMedia(url: string | null | undefined): boolean {
   if (!url) return false;
   return (
     url.includes('youtube.com') ||
     url.includes('youtu.be') ||
+    isInstagramUrl(url) ||
     url.includes('vimeo.com') ||
     /\.(mp4|webm|mov|m4v|mkv|ogg)($|\?)/i.test(url)
   );
