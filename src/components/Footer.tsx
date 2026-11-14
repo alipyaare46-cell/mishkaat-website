@@ -2,7 +2,6 @@ import React from 'react';
 import { Mail, Phone, MapPin, Shield } from 'lucide-react';
 import { WebsiteSettings } from '../types';
 import { useLanguage } from '../context/LanguageContext';
-import emblemImg from '../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 interface FooterProps {
   settings: WebsiteSettings | null;
@@ -27,10 +26,10 @@ export const Footer: React.FC<FooterProps> = ({ settings, navigate }) => {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <img
-                src={emblemImg}
+                src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
                 alt="Mishkaat Logo"
                 referrerPolicy="no-referrer"
-                className="w-10 h-10 rounded-lg object-cover border border-[#D4AF37]/60 shadow-sm shrink-0"
+                className="w-11 h-11 rounded-lg bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-sm shrink-0"
               />
               <span className="font-display text-2xl font-bold tracking-wider text-[#D4AF37]">
                 MISHKAAT

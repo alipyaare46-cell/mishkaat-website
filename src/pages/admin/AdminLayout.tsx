@@ -29,7 +29,6 @@ import { AdminShayariyan } from './AdminShayariyan';
 import { AdminContactMessages } from './AdminContactMessages';
 import { AdminSettings } from './AdminSettings';
 import { AdminSecurity } from './AdminSecurity';
-import emblemImg from '../../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 
 interface AdminLayoutProps {
@@ -109,9 +108,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </button>
             <div className="flex items-center gap-2.5">
               <img
-                src={emblemImg}
-                alt="Mishkaat"
-                className="w-8 h-8 rounded-md object-cover border border-[#D4AF37]/40"
+                src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+                alt="Mishkaat Logo"
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-md bg-white object-contain p-0.5 border border-[#D4AF37]/60"
               />
               <span className="font-display text-lg font-bold tracking-wider text-[#D4AF37]">
                 MISHKAAT

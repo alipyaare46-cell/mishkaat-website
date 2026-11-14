@@ -3,7 +3,6 @@ import { Shield, Lock, User, AlertCircle, ArrowLeft, CheckCircle2, ShieldAlert }
 import { useAuth } from '../../context/AuthContext';
 
 import { api } from '../../services/api';
-import emblemImg from '../../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 interface AdminLoginProps {
   onBackToPublic: () => void;
@@ -42,12 +41,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
           <span>Return to MISHKAAT Public Platform</span>
         </button>
 
-        <div className="w-16 h-16 rounded-xl bg-[#064E3B] border-2 border-[#D4AF37]/50 p-2 mx-auto shadow-md flex items-center justify-center">
+        <div className="w-18 h-18 rounded-xl bg-white border-2 border-[#D4AF37]/70 p-1.5 mx-auto shadow-md flex items-center justify-center">
           <img
-            src={emblemImg}
-            alt="Mishkaat Emblem"
+            src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+            alt="Mishkaat Logo"
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover rounded-md"
+            className="w-full h-full object-contain rounded-md"
           />
         </div>
 

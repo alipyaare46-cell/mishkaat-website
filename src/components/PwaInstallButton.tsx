@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, Smartphone, Laptop, Check, X, Share, ExternalLink, Copy } from 'lucide-react';
-import emblemImg from '../assets/images/mishkaat_logo_emblem_1794552300053.jpg';
 
 interface PwaInstallButtonProps {
   variant?: 'header' | 'banner' | 'menu';
@@ -97,9 +96,10 @@ export const PwaInstallButton: React.FC<PwaInstallButtonProps> = ({ variant = 'h
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <img
-                src={emblemImg}
+                src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
                 alt="Mishkaat Icon"
-                className="w-11 h-11 rounded-xl object-cover border border-[#D4AF37]/60 shadow-sm shrink-0"
+                referrerPolicy="no-referrer"
+                className="w-11 h-11 rounded-xl bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-sm shrink-0"
               />
               <div>
                 <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -198,9 +198,10 @@ function InstallGuideModal({ deferredPrompt, onPromptNative, onClose }: InstallG
         <div className="flex items-center justify-between border-b border-white/10 pb-3.5">
           <div className="flex items-center gap-3">
             <img
-              src={emblemImg}
+              src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
               alt="Mishkaat Logo"
-              className="w-11 h-11 rounded-xl object-cover border border-[#D4AF37]/60 shadow-md shrink-0"
+              referrerPolicy="no-referrer"
+              className="w-11 h-11 rounded-xl bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-md shrink-0"
             />
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
