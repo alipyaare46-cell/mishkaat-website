@@ -41,12 +41,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
           <span>Return to MISHKAAT Public Platform</span>
         </button>
 
-        <div className="w-18 h-18 rounded-xl bg-white border-2 border-[#D4AF37]/70 p-1.5 mx-auto shadow-md flex items-center justify-center">
+        <div className="w-20 h-20 rounded-2xl bg-white border-2 border-[#D4AF37]/70 p-1.5 mx-auto shadow-md flex items-center justify-center">
           <img
-            src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+            src="/mishkaat-logo.png"
             alt="Mishkaat Logo"
             referrerPolicy="no-referrer"
-            className="w-full h-full object-contain rounded-md"
+            className="w-full h-full object-contain rounded-lg"
           />
         </div>
 

@@ -96,10 +96,10 @@ export const PwaInstallButton: React.FC<PwaInstallButtonProps> = ({ variant = 'h
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <img
-                src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+                src="/icon-192.png"
                 alt="Mishkaat Icon"
                 referrerPolicy="no-referrer"
-                className="w-11 h-11 rounded-xl bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-sm shrink-0"
+                className="w-11 h-11 rounded-xl bg-white object-contain p-1 border border-[#D4AF37]/70 shadow-sm shrink-0"
               />
               <div>
                 <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -198,10 +198,10 @@ function InstallGuideModal({ deferredPrompt, onPromptNative, onClose }: InstallG
         <div className="flex items-center justify-between border-b border-white/10 pb-3.5">
           <div className="flex items-center gap-3">
             <img
-              src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+              src="/icon-192.png"
               alt="Mishkaat Logo"
               referrerPolicy="no-referrer"
-              className="w-11 h-11 rounded-xl bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-md shrink-0"
+              className="w-11 h-11 rounded-xl bg-white object-contain p-1 border border-[#D4AF37]/70 shadow-md shrink-0"
             />
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">

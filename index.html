@@ -19,9 +19,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Mishkaat" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <!-- OpenGraph Social Cards (Facebook, WhatsApp, LinkedIn, Discord) -->
     <meta property="og:type" content="website" />
@@ -29,7 +32,7 @@
     <meta property="og:site_name" content="MISHKAAT" />
     <meta property="og:title" content="MISHKAAT — Islamic Knowledge & Media Platform" />
     <meta property="og:description" content="Sanctuary of Ahl-e-Sunnat knowledge, verified speeches, Islamic reels, digital library of books, research articles, aqwaal, and devotional verse." />
-    <meta property="og:image" content="https://mishkaat-website-1.onrender.com/icon-512.png" />
+    <meta property="og:image" content="https://mishkaat-website-1.onrender.com/mishkaat-logo.png" />
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
 
@@ -38,7 +41,7 @@
     <meta name="twitter:url" content="https://mishkaat-website-1.onrender.com/" />
     <meta name="twitter:title" content="MISHKAAT — Islamic Knowledge & Media Platform" />
     <meta name="twitter:description" content="Sanctuary of Ahl-e-Sunnat knowledge, verified speeches, Islamic reels, digital library of books, and sacred literature." />
-    <meta name="twitter:image" content="https://mishkaat-website-1.onrender.com/icon-512.png" />
+    <meta name="twitter:image" content="https://mishkaat-website-1.onrender.com/mishkaat-logo.png" />
 
     <!-- Web Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,12 +54,27 @@
       "@context": "https://schema.org",
       "@graph": [
         {
+          "@type": "Organization",
+          "@id": "https://mishkaat-website-1.onrender.com/#organization",
+          "name": "MISHKAAT",
+          "alternateName": "مشکوٰۃ",
+          "url": "https://mishkaat-website-1.onrender.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://mishkaat-website-1.onrender.com/icon-512.png",
+            "width": 512,
+            "height": 512
+          },
+          "image": "https://mishkaat-website-1.onrender.com/mishkaat-logo.png"
+        },
+        {
           "@type": "WebApplication",
           "name": "MISHKAAT",
           "alternateName": "مشکوٰۃ",
           "applicationCategory": "EducationalApplication",
           "operatingSystem": "All",
           "url": "https://mishkaat-website-1.onrender.com/",
+          "image": "https://mishkaat-website-1.onrender.com/icon-512.png",
           "description": "Authentic Ahl-e-Sunnat Islamic knowledge, scholarly speeches, digital library of books, Islamic reels, research articles, and spiritual poetry.",
           "author": {
             "@type": "Person",
@@ -70,8 +88,12 @@
         },
         {
           "@type": "WebSite",
-          "name": "MISHKAAT Platform",
+          "name": "MISHKAAT",
+          "alternateName": "MISHKAAT Platform",
           "url": "https://mishkaat-website-1.onrender.com/",
+          "publisher": {
+            "@id": "https://mishkaat-website-1.onrender.com/#organization"
+          },
           "potentialAction": {
             "@type": "SearchAction",
             "target": "https://mishkaat-website-1.onrender.com/#search?q={search_term_string}",

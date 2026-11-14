@@ -61,10 +61,10 @@ export const Header: React.FC<HeaderProps> = ({ currentRoute, navigate, onOpenSe
             className="flex items-center gap-3 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] rounded-lg py-1 whitespace-nowrap shrink-0"
           >
             <img
-              src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+              src="/icon-192.png"
               alt="Mishkaat Logo"
               referrerPolicy="no-referrer"
-              className="w-11 h-11 rounded-lg bg-white object-contain p-0.5 border border-[#D4AF37]/70 shadow-sm transition-transform duration-200 group-hover:scale-105"
+              className="w-11 h-11 rounded-lg bg-white object-contain p-1 border border-[#D4AF37]/70 shadow-sm transition-transform duration-200 group-hover:scale-105"
             />
             <div className="flex flex-col">
               <span className="font-display text-xl sm:text-2xl font-bold tracking-wider text-[#D4AF37] leading-none">

@@ -108,7 +108,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </button>
             <div className="flex items-center gap-2.5">
               <img
-                src="/assets/aistudio/Mishkaat_Emerald_Gold_Emblem_2c4210f5.png"
+                src="/icon-192.png"
                 alt="Mishkaat Logo"
                 referrerPolicy="no-referrer"
                 className="w-9 h-9 rounded-md bg-white object-contain p-0.5 border border-[#D4AF37]/60"

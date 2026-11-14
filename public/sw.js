@@ -1,12 +1,16 @@
 // MISHKAAT Platform Service Worker with Instant Auto-Update Architecture
-const CACHE_VERSION = 'mishkaat-v2.7-20261114';
+const CACHE_VERSION = 'mishkaat-v2.8-20261114';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/favicon.ico',
+  '/favicon-48x48.png',
+  '/favicon-96x96.png',
   '/icon-192.png',
   '/icon-512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/mishkaat-logo.png'
 ];
 
 // Install Event: Cache essential shell & skip waiting immediately
