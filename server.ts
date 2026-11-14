@@ -66,6 +66,11 @@ async function startServer() {
   app.use('/api', apiRouter);
   app.use('/api/cloud', cloudRouter);
 
+  // Lightweight health endpoint (useful for uptime pings so Render free tier stays awake)
+  app.get('/health', (_req, res) => {
+    res.status(200).setHeader('Cache-Control', 'no-store').json({ ok: true, status: 'up' });
+  });
+
   // Dynamic XML Sitemap Handler
   const sitemapHandler = (_req: express.Request, res: express.Response) => {
     try {
@@ -79,15 +84,55 @@ async function startServer() {
     }
   };
 
-  // In development, hook into Vite middlewares; in production, serve dist
+  // Explicit /robots.txt Handler (always HTTP 200, text/plain; charset=utf-8, never blocked)
   const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev) {
-    app.get('/sitemap.xml', sitemapHandler);
-    app.get('/robots.txt', (_req, res) => {
-      res.type('text/plain');
-      res.sendFile(path.resolve(process.cwd(), 'public/robots.txt'));
-    });
+  const DEFAULT_ROBOTS_TXT = [
+    'User-agent: *',
+    'Allow: /',
+    '',
+    'Sitemap: https://mishkaat-website-1.onrender.com/sitemap.xml',
+    ''
+  ].join('\n');
 
+  const robotsHandler = (_req: express.Request, res: express.Response) => {
+    const candidates = isDev
+      ? [
+          path.resolve(process.cwd(), 'public/robots.txt'),
+          path.resolve(__dirname, 'dist/robots.txt')
+        ]
+      : [
+          path.resolve(__dirname, 'dist/robots.txt'),
+          path.resolve(process.cwd(), 'public/robots.txt')
+        ];
+
+    let content = DEFAULT_ROBOTS_TXT;
+    for (const candidate of candidates) {
+      try {
+        if (fs.existsSync(candidate)) {
+          const fileText = fs.readFileSync(candidate, 'utf-8');
+          if (fileText.trim().length > 0) {
+            content = fileText;
+            break;
+          }
+        }
+      } catch {
+        // Fallback to next candidate or DEFAULT_ROBOTS_TXT
+      }
+    }
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.removeHeader('X-Robots-Tag');
+    res.send(content);
+  };
+
+  // Register crawler endpoints before Vite, express.static, and SPA catch-all
+  app.get('/robots.txt', robotsHandler);
+  app.get('/sitemap.xml', sitemapHandler);
+
+  // In development, hook into Vite middlewares; in production, serve dist
+  if (isDev) {
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -118,14 +163,6 @@ async function startServer() {
     const distPath = path.resolve(__dirname, 'dist');
     const distIndexPath = path.resolve(distPath, 'index.html');
     let cachedDistHtml: string | null = null;
-
-    app.get('/robots.txt', (_req, res) => {
-      res.type('text/plain');
-      res.sendFile(path.join(distPath, 'robots.txt'));
-    });
-
-    // Dynamic XML Sitemap route inside production server setup, before express.static and before app.get('*')
-    app.get('/sitemap.xml', sitemapHandler);
 
     app.use(express.static(distPath, { index: false }));
 

@@ -1,5 +1,5 @@
 // MISHKAAT Platform Service Worker with Instant Auto-Update Architecture
-const CACHE_VERSION = 'mishkaat-v2.6-20261113';
+const CACHE_VERSION = 'mishkaat-v2.7-20261114';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -39,6 +39,15 @@ self.addEventListener('activate', (event) => {
 // Fetch Event: Dynamic Network-First for API and Uploads; Cache-First for static assets
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Never intercept crawler files or health checks
+  if (
+    url.pathname === '/robots.txt' ||
+    url.pathname === '/sitemap.xml' ||
+    url.pathname === '/health'
+  ) {
+    return;
+  }
 
   // 1. API calls, chunk uploads, database requests: ALWAYS NETWORK FIRST
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads')) {
