@@ -1,14 +1,39 @@
 import { createClient, Client } from '@libsql/client';
 import { db } from './db';
 
-// Fallback to the user's provided Turso credentials if not present in process.env
-const TURSO_URL =
-  process.env.TURSO_DATABASE_URL ||
-  'libsql://mishkaat-db-librarian.aws-ap-southeast-1.turso.io';
-
-const TURSO_TOKEN =
-  process.env.TURSO_AUTH_TOKEN ||
+// Fallback to the user's provided Turso credentials if not present or invalid in process.env
+const DEFAULT_TURSO_URL = 'libsql://mishkaat-db-librarian.aws-ap-southeast-1.turso.io';
+const DEFAULT_TURSO_TOKEN =
   'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTQzNzk0MTUsImlkIjoiMDFhMWEyNjEtZTYwMS03MzhkLWFhNTktODcyNTQyOWIyYmUxIiwia2lkIjoidnY3RnFYb0NSZjN0MmluQmdoTXVvX2V1cE1hWnFBMWliU1J3Y1Q1Wmo5NCIsInJpZCI6IjdjYzljNzI2LTA2ZmItNDRjNy1iMWUzLWVmZjU0ODJjODFmOSJ9.w2MfAOOQVZosg_Ibm0FIwM_TVcrm6eA6FQXvXGPrDfzPfYdNAop8VunqEM2Ks0HarFMjjsYOqZtApsGeXmZWDQ';
+
+function isValidTursoUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return (
+      ['libsql:', 'https:', 'http:', 'wss:', 'ws:'].includes(parsed.protocol) &&
+      Boolean(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function resolveTursoUrl(rawUrl: string | undefined): { url: string; usedFallback: boolean } {
+  const cleaned = (rawUrl || '').trim().replace(/^["']|["']$/g, '');
+  if (cleaned && isValidTursoUrl(cleaned)) {
+    return { url: cleaned, usedFallback: false };
+  }
+  if (cleaned) {
+    console.warn('[Turso] Ignoring malformed TURSO_DATABASE_URL from environment and using configured default URL.');
+  }
+  return { url: DEFAULT_TURSO_URL, usedFallback: true };
+}
+
+const resolvedTurso = resolveTursoUrl(process.env.TURSO_DATABASE_URL);
+const TURSO_URL = resolvedTurso.url;
+const rawEnvToken = (process.env.TURSO_AUTH_TOKEN || '').trim().replace(/^["']|["']$/g, '');
+const TURSO_TOKEN =
+  !resolvedTurso.usedFallback && rawEnvToken ? rawEnvToken : DEFAULT_TURSO_TOKEN;
 
 let tursoClient: Client | null = null;
 let isConnected = false;
@@ -46,7 +71,8 @@ export function getTursoClient(): Client | null {
     });
     return tursoClient;
   } catch (err: any) {
-    console.error('Failed to create Turso client:', err.message);
+    lastSyncError = err.message;
+    console.warn('[Turso] Turso client unavailable (continuing with local SQLite):', err.message);
     return null;
   }
 }

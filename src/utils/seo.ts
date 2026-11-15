@@ -113,7 +113,7 @@ export function buildRouteSeoMeta(params: {
 
   const staticMeta: Record<string, { title: string; description: string }> = {
     home: {
-      title: 'MISHKAAT — Islamic Knowledge & Media Platform',
+      title: 'MISHKAAT | Islamic Knowledge & Media Platform',
       description:
         'Explore authentic Islamic knowledge at MISHKAAT — Ahl-e-Sunnat speeches, Islamic reels, books, articles, aqwaal, and devotional poetry. Discover valuable Islamic content and resources.'
     },
