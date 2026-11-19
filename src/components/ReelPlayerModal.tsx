@@ -27,7 +27,13 @@ import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
 import { InstagramVideoEmbed } from './InstagramVideoEmbed';
-import { extractYouTubeId, isInstagramUrl, getInstagramEmbedUrl } from '../utils/media';
+import {
+  extractYouTubeId,
+  isInstagramUrl,
+  getInstagramEmbedUrl,
+  getInstagramStreamUrl,
+  getInstagramThumbUrl
+} from '../utils/media';
 
 interface ReelPlayerModalProps {
   reel: Reel | null;
@@ -74,7 +80,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   const [isLiking, setIsLiking] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFitMode, setIsFitMode] = useState(false); // Toggle between full bleed and complete uncropped fit
-  const [isInstagramZoom, setIsInstagramZoom] = useState(false); // Optional zoom for letterboxed Instagram reels
+  const [isInstagramZoom, setIsInstagramZoom] = useState(false); // Optional zoom for fallback embed
+  const [igStreamFailed, setIgStreamFailed] = useState(false); // Fallback to embed only if direct stream fails
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -115,6 +122,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   // Sync initial reel unconditionally so close/unmount works immediately
   useEffect(() => {
     setCurrentReel(initialReel);
+    setIgStreamFailed(false);
     if (initialReel) {
       setIsCommentsOpen(false);
       setShowSpeedMenu(false);
@@ -161,6 +169,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   useEffect(() => {
     if (!currentReel) return;
     setIsPlaying(true);
+    setIgStreamFailed(false);
     loadInteractions(currentReel.id);
 
     // Track unique reel view once per session
@@ -275,7 +284,12 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
   const isYouTube = currentReel.video_url.includes('youtube.com') || currentReel.video_url.includes('youtu.be');
   const isInstagram = !isYouTube && isInstagramUrl(currentReel.video_url);
+  const instagramStreamUrl = isInstagram ? getInstagramStreamUrl(currentReel.video_url) : null;
+  const instagramThumbUrl = isInstagram ? getInstagramThumbUrl(currentReel.video_url) : null;
   const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(currentReel.video_url) : null;
+  const isInstagramFallbackEmbed = isInstagram && (!instagramStreamUrl || igStreamFailed);
+  const resolvedVideoSrc = isInstagram && instagramStreamUrl ? instagramStreamUrl : currentReel.video_url;
+  const resolvedPosterSrc = currentReel.thumbnail || instagramThumbUrl || undefined;
 
   const getYouTubeEmbed = (url: string) => {
     const videoId = extractYouTubeId(url);
@@ -389,8 +403,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 relative">
-            {/* Fit / Crop Mode Toggle (native video) or Zoom toggle (Instagram) */}
-            {!isYouTube && !isInstagram && (
+            {/* Fit / Crop Mode Toggle (native video incl. Instagram direct stream) or Zoom toggle (fallback embed) */}
+            {!isYouTube && !isInstagramFallbackEmbed && (
               <button
                 type="button"
                 onClick={() => setIsFitMode(!isFitMode)}
@@ -404,7 +418,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
                 {isFitMode ? 'Fit 📐' : 'Fill 🔲'}
               </button>
             )}
-            {isInstagram && (
+            {isInstagramFallbackEmbed && (
               <button
                 type="button"
                 onClick={() => setIsInstagramZoom(!isInstagramZoom)}
@@ -420,7 +434,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             )}
 
             {/* Speed Selector Toggle (native video & YouTube) */}
-            {!isInstagram && (
+            {!isInstagramFallbackEmbed && (
               <div className="relative">
                 <button
                   type="button"
@@ -449,8 +463,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </div>
             )}
 
-            {/* Open on Instagram fallback link */}
-            {isInstagram && currentReel.video_url && (
+            {/* Open on Instagram link (only shown when falling back to embed) */}
+            {isInstagramFallbackEmbed && currentReel.video_url && (
               <a
                 href={currentReel.video_url}
                 target="_blank"
@@ -463,10 +477,10 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </a>
             )}
 
-            {/* Direct Download Button (only for direct video files) */}
-            {!isYouTube && !isInstagram && currentReel.video_url && (
+            {/* Direct Download Button (for direct video files & proxied Instagram videos) */}
+            {!isYouTube && !isInstagramFallbackEmbed && resolvedVideoSrc && (
               <a
-                href={currentReel.video_url}
+                href={resolvedVideoSrc}
                 download
                 className="p-1.5 rounded-full bg-black/40 hover:bg-[#D4AF37] hover:text-stone-950 text-white transition-colors cursor-pointer"
                 title="Download Reel Video"
@@ -475,7 +489,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </a>
             )}
 
-            {!isYouTube && !isInstagram && (
+            {!isYouTube && !isInstagramFallbackEmbed && (
               <button
                 type="button"
                 onClick={toggleMute}
@@ -512,8 +526,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
         {/* Video Player Area */}
         <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-          {/* On-screen Rewind -10s and Forward +10s controls (for native video & YouTube links) */}
-          {!isInstagram && (
+          {/* On-screen Rewind -10s and Forward +10s controls */}
+          {!isInstagramFallbackEmbed && (
             <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-20">
               <button
                 type="button"
@@ -550,7 +564,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
                 sendYouTubeCommand('listening');
               }}
             />
-          ) : isInstagram ? (
+          ) : isInstagramFallbackEmbed ? (
             instagramEmbedUrl ? (
               <InstagramVideoEmbed
                 embedUrl={instagramEmbedUrl}
@@ -574,14 +588,19 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             )
           ) : (
             <video
-              key={currentReel.id}
+              key={`${currentReel.id}-${resolvedVideoSrc}`}
               ref={videoRef}
-              src={currentReel.video_url}
-              poster={currentReel.thumbnail || undefined}
+              src={resolvedVideoSrc}
+              poster={resolvedPosterSrc}
               loop
               autoPlay
               playsInline
               onClick={togglePlay}
+              onError={() => {
+                if (isInstagram && !igStreamFailed) {
+                  setIgStreamFailed(true);
+                }
+              }}
               className={`w-full h-full ${
                 isFitMode ? 'object-contain bg-black' : 'object-cover'
               } cursor-pointer transition-opacity duration-200 ${
@@ -593,7 +612,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           )}
 
           {/* Central Play/Pause Flash Overlay */}
-          {!isYouTube && !isInstagram && !isPlaying && (
+          {!isYouTube && !isInstagramFallbackEmbed && !isPlaying && (
             <button
               onClick={togglePlay}
               className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white pointer-events-auto cursor-pointer border border-white/20"

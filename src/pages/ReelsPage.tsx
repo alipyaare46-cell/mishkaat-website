@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Film, Play, Search, User, Filter, ArrowRight, Eye } from 'lucide-react';
 import { Reel, Scholar } from '../types';
+import { getInstagramThumbUrl } from '../utils/media';
 
 interface ReelsPageProps {
   reels: Reel[];
@@ -171,17 +172,22 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-            {filteredReels.map((reel) => (
+            {filteredReels.map((reel) => {
+              const cardThumb = reel.thumbnail || getInstagramThumbUrl(reel.video_url);
+              return (
               <div
                 key={reel.id}
                 onClick={() => onPlayReel(reel)}
                 className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-white/10 hover:border-[#D4AF37]/80 hover:shadow-xl transition-all"
               >
-                {reel.thumbnail ? (
+                {cardThumb ? (
                   <img
-                    src={reel.thumbnail}
+                    src={cardThumb}
                     alt={reel.title}
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
@@ -220,7 +226,8 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
                   <Play className="w-5 h-5 ml-0.5 fill-[#064E3B]" />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

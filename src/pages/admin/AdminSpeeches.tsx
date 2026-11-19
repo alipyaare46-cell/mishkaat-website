@@ -3,7 +3,14 @@ import { Volume2, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link
 import { Speech, Scholar } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
-import { extractYouTubeThumbnail, isInstagramUrl, getInstagramEmbedUrl } from '../../utils/media';
+import {
+  extractYouTubeThumbnail,
+  isInstagramUrl,
+  getInstagramEmbedUrl,
+  getInstagramStreamUrl,
+  getInstagramThumbUrl
+} from '../../utils/media';
+import { InstagramVideoEmbed } from '../../components/InstagramVideoEmbed';
 
 interface AdminSpeechesProps {
   speeches: Speech[];
@@ -40,6 +47,7 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
   const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
   const [tags, setTags] = useState('');
   const [isPublished, setIsPublished] = useState(true);
+  const [igPreviewFailed, setIgPreviewFailed] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -607,6 +615,7 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                       onChange={(e) => {
                         const val = e.target.value;
                         setMediaUrl(val);
+                        setIgPreviewFailed(false);
                         const ytThumb = extractYouTubeThumbnail(val);
                         if (ytThumb && (!thumbnail || thumbnail.includes('google.com') || !thumbnail.trim())) {
                           setThumbnail(ytThumb);
@@ -625,9 +634,7 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                       <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>
-                          {getInstagramEmbedUrl(mediaUrl)
-                            ? 'Instagram Reel / Video recognized & ready to embed!'
-                            : 'Instagram link detected — please use a direct /reel/ or /p/ URL.'}
+                          Instagram Reel / Video recognized &amp; ready to play directly on MISHKAAT!
                         </span>
                       </p>
                     )}
@@ -664,13 +671,24 @@ export const AdminSpeeches: React.FC<AdminSpeechesProps> = ({
                           <span>YouTube Speech Linked</span>
                         </div>
                       ) : isInstagramUrl(mediaUrl) ? (
-                        getInstagramEmbedUrl(mediaUrl) ? (
-                          <iframe
-                            src={getInstagramEmbedUrl(mediaUrl)!}
-                            title="Instagram Speech Preview"
-                            className="w-full max-w-xs h-72 border-0 rounded bg-white"
-                            allowFullScreen
+                        getInstagramStreamUrl(mediaUrl) && !igPreviewFailed ? (
+                          <video
+                            key={mediaUrl}
+                            src={getInstagramStreamUrl(mediaUrl)!}
+                            poster={getInstagramThumbUrl(mediaUrl) || undefined}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            onError={() => setIgPreviewFailed(true)}
+                            className="w-full max-h-52 object-contain rounded"
                           />
+                        ) : getInstagramEmbedUrl(mediaUrl) ? (
+                          <div className="w-full max-w-xs h-72 rounded overflow-hidden">
+                            <InstagramVideoEmbed
+                              embedUrl={getInstagramEmbedUrl(mediaUrl)!}
+                              title="Instagram Speech Preview"
+                            />
+                          </div>
                         ) : (
                           <div className="p-3 text-center text-white text-[11px]">
                             <Volume2 className="w-6 h-6 text-[#D4AF37] mx-auto mb-1" />

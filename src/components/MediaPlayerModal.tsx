@@ -30,7 +30,9 @@ import {
   resolveMediaThumbnail,
   isVideoMedia,
   isInstagramUrl,
-  getInstagramEmbedUrl
+  getInstagramEmbedUrl,
+  getInstagramStreamUrl,
+  getInstagramThumbUrl
 } from '../utils/media';
 
 interface MediaPlayerModalProps {
@@ -52,6 +54,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
   const [hasLiked, setHasLiked] = useState<boolean>(false);
   const [comments, setComments] = useState<any[]>([]);
   const [isLiking, setIsLiking] = useState(false);
+  const [igStreamFailed, setIgStreamFailed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -121,6 +124,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
   }, []);
 
   useEffect(() => {
+    setIgStreamFailed(false);
     if (speech && speech.id) {
       loadInteractions(speech.id);
     }
@@ -132,7 +136,10 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
   const youtubeId = extractYouTubeId(mediaUrl);
   const isYouTube = !!youtubeId || mediaUrl.includes('youtube.com') || mediaUrl.includes('youtu.be');
   const isInstagram = !isYouTube && isInstagramUrl(mediaUrl);
+  const instagramStreamUrl = isInstagram ? getInstagramStreamUrl(mediaUrl) : null;
+  const instagramThumbUrl = isInstagram ? getInstagramThumbUrl(mediaUrl) : null;
   const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(mediaUrl) : null;
+  const isInstagramFallbackEmbed = isInstagram && (!instagramStreamUrl || igStreamFailed);
 
   // Determine if video or audio
   const isAudioOnly =
@@ -245,7 +252,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
                 </div>
               )}
             </div>
-          ) : isInstagram ? (
+          ) : isInstagramFallbackEmbed ? (
             <div className="w-full h-[380px] sm:h-[420px] relative bg-black flex flex-col items-center justify-center overflow-hidden">
               {instagramEmbedUrl ? (
                 <InstagramVideoEmbed
@@ -275,11 +282,17 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
             <div className="w-full relative group bg-black flex items-center justify-center">
               <video
                 ref={videoRef}
-                src={mediaUrl}
+                src={isInstagram && instagramStreamUrl ? instagramStreamUrl : mediaUrl}
+                poster={speech.thumbnail || instagramThumbUrl || undefined}
                 controls
                 autoPlay
                 playsInline
                 preload="metadata"
+                onError={() => {
+                  if (isInstagram && !igStreamFailed) {
+                    setIgStreamFailed(true);
+                  }
+                }}
                 className="w-full max-h-[380px] object-contain mx-auto bg-black"
               />
             </div>
@@ -313,7 +326,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
 
         {/* Media Control Bar: Speed, Rewind, Forward, Download */}
         <div className="px-4 py-2.5 bg-stone-900 text-stone-200 border-b border-stone-800 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 select-none">
-          {!isInstagram ? (
+          {!isInstagramFallbackEmbed ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => skipMedia(-10)}
@@ -373,8 +386,8 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
               </a>
             )}
 
-            {/* Direct Open in Instagram Button */}
-            {isInstagram && mediaUrl && (
+            {/* Direct Open in Instagram Button (only in fallback embed mode) */}
+            {isInstagramFallbackEmbed && mediaUrl && (
               <a
                 href={mediaUrl}
                 target="_blank"
@@ -387,10 +400,10 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
               </a>
             )}
 
-            {/* Download button for uploaded video/audio files */}
-            {!isYouTube && !isInstagram && mediaUrl && (
+            {/* Download button for uploaded video/audio files & streamed Instagram videos */}
+            {!isYouTube && !isInstagramFallbackEmbed && mediaUrl && (
               <a
-                href={mediaUrl}
+                href={isInstagram && instagramStreamUrl ? instagramStreamUrl : mediaUrl}
                 download={speech.title || 'speech'}
                 target="_blank"
                 rel="noopener noreferrer"

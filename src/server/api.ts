@@ -5,8 +5,10 @@ import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
+import { Readable } from 'stream';
 import { db, generateId } from './db';
 import { getTursoClient, syncRecordToTurso, syncDeleteFromTurso, syncDeleteWhereFromTurso } from './turso';
+import { resolveInstagramMedia, invalidateInstagramCache } from './instagram';
 
 export const apiRouter = Router();
 
@@ -1176,6 +1178,178 @@ apiRouter.post('/upload-chunk-complete', requireAdmin, async (req: Request, res:
   } catch (err: any) {
     console.error('Error completing chunked upload:', err);
     return res.status(500).json({ error: err.message || 'Failed to assemble uploaded chunks' });
+  }
+});
+
+// -------------------------------------------------------------
+// INSTAGRAM DIRECT VIDEO STREAM & THUMBNAIL PROXY
+// Allows Instagram Reels/Posts to play directly inside MISHKAAT's native video player
+// even when Instagram's /embed/ iframe shows "Watch on Instagram".
+// -------------------------------------------------------------
+apiRouter.get('/instagram/resolve', async (req: Request, res: Response) => {
+  const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  if (!rawUrl) {
+    res.status(400).json({ error: 'Instagram URL is required', playable: false });
+    return;
+  }
+
+  try {
+    const resolved = await resolveInstagramMedia(rawUrl);
+    if (!resolved) {
+      res.json({ playable: false, streamUrl: null, thumbUrl: null, embedUrl: null });
+      return;
+    }
+
+    const encoded = encodeURIComponent(rawUrl);
+    res.json({
+      playable: Boolean(resolved.videoUrl),
+      shortcode: resolved.shortcode,
+      streamUrl: resolved.videoUrl ? `/api/instagram/stream?url=${encoded}` : null,
+      thumbUrl: resolved.posterUrl ? `/api/instagram/thumb?url=${encoded}` : null,
+      embedUrl: resolved.embedUrl
+    });
+  } catch {
+    res.json({ playable: false, streamUrl: null, thumbUrl: null, embedUrl: null });
+  }
+});
+
+apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
+  const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  if (!rawUrl) {
+    res.status(400).json({ error: 'Instagram URL is required' });
+    return;
+  }
+
+  const abortController = new AbortController();
+  let clientClosed = false;
+  req.on('close', () => {
+    clientClosed = true;
+    abortController.abort();
+  });
+
+  try {
+    let resolved = await resolveInstagramMedia(rawUrl);
+    if (!resolved?.videoUrl) {
+      res.status(404).json({ error: 'Direct video stream unavailable for this Instagram URL' });
+      return;
+    }
+
+    const fetchUpstream = async (targetUrl: string) => {
+      const headers: Record<string, string> = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: '*/*',
+        Referer: 'https://www.instagram.com/'
+      };
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+      return fetch(targetUrl, {
+        headers,
+        signal: abortController.signal
+      });
+    };
+
+    let upstream = await fetchUpstream(resolved.videoUrl);
+
+    // If cached CDN URL expired (403/410), refresh once automatically
+    if (upstream.status === 403 || upstream.status === 410) {
+      invalidateInstagramCache(rawUrl);
+      resolved = await resolveInstagramMedia(rawUrl, true);
+      if (resolved?.videoUrl) {
+        upstream = await fetchUpstream(resolved.videoUrl);
+      }
+    }
+
+    if (!upstream.ok && upstream.status !== 206) {
+      res.status(502).json({ error: `Upstream Instagram CDN returned ${upstream.status}` });
+      return;
+    }
+
+    res.status(upstream.status);
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'video/mp4');
+    res.setHeader('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+
+    const contentLength = upstream.headers.get('content-length');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+
+    const contentRange = upstream.headers.get('content-range');
+    if (contentRange) res.setHeader('Content-Range', contentRange);
+
+    if (!upstream.body || clientClosed) {
+      res.end();
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(upstream.body as any);
+    nodeStream.on('error', () => {
+      if (!res.headersSent) res.status(502).end();
+      else res.end();
+    });
+    req.on('close', () => {
+      nodeStream.destroy();
+    });
+    nodeStream.pipe(res);
+  } catch (err: any) {
+    if (clientClosed || err?.name === 'AbortError') return;
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Unable to stream Instagram video' });
+    }
+  }
+});
+
+apiRouter.get('/instagram/thumb', async (req: Request, res: Response) => {
+  const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  if (!rawUrl) {
+    res.status(400).end();
+    return;
+  }
+
+  try {
+    let resolved = await resolveInstagramMedia(rawUrl);
+    if (!resolved?.posterUrl) {
+      res.status(404).end();
+      return;
+    }
+
+    let upstream = await fetch(resolved.posterUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Referer: 'https://www.instagram.com/'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (upstream.status === 403 || upstream.status === 410) {
+      invalidateInstagramCache(rawUrl);
+      resolved = await resolveInstagramMedia(rawUrl, true);
+      if (resolved?.posterUrl) {
+        upstream = await fetch(resolved.posterUrl, {
+          headers: { Referer: 'https://www.instagram.com/' },
+          signal: AbortSignal.timeout(8000)
+        });
+      }
+    }
+
+    if (!upstream.ok || !upstream.body) {
+      res.status(404).end();
+      return;
+    }
+
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+    const nodeStream = Readable.fromWeb(upstream.body as any);
+    nodeStream.on('error', () => {
+      if (!res.headersSent) res.status(404).end();
+      else res.end();
+    });
+    nodeStream.pipe(res);
+  } catch {
+    if (!res.headersSent) res.status(404).end();
   }
 });
 

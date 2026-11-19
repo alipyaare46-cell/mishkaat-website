@@ -4,7 +4,7 @@ import { Scholar, Speech, Reel, Book, Article, Aqwaal, Shayariyan, WebsiteSettin
 import madinahHeroImg from '../assets/images/madinah_munawwarah_hero_1793189667524.jpg';
 import { useLanguage } from '../context/LanguageContext';
 import { useUserAuth } from '../context/UserAuthContext';
-import { resolveMediaThumbnail, isVideoMedia } from '../utils/media';
+import { resolveMediaThumbnail, isVideoMedia, getInstagramThumbUrl } from '../utils/media';
 
 interface HomePageProps {
   settings: WebsiteSettings | null;
@@ -398,17 +398,22 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                {reels.slice(0, 4).map((reel) => (
+                {reels.slice(0, 4).map((reel) => {
+                  const cardThumb = reel.thumbnail || getInstagramThumbUrl(reel.video_url);
+                  return (
                   <div
                     key={reel.id}
                     onClick={() => onPlayReel(reel)}
                     className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-white/10 shadow-lg"
                   >
-                    {reel.thumbnail ? (
+                    {cardThumb ? (
                       <img
-                        src={reel.thumbnail}
+                        src={cardThumb}
                         alt={reel.title}
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
@@ -454,7 +459,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <Play className="w-4 h-4 ml-0.5 fill-[#064E3B]" />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

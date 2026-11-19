@@ -3,6 +3,7 @@ import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock, Eye } f
 import { Scholar, Speech, Reel } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
+import { getInstagramThumbUrl } from '../utils/media';
 
 interface ScholarProfilePageProps {
   slug: string;
@@ -264,17 +265,22 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {reels.map((reel) => (
+                {reels.map((reel) => {
+                  const cardThumb = reel.thumbnail || getInstagramThumbUrl(reel.video_url);
+                  return (
                   <div
                     key={reel.id}
                     onClick={() => onPlayReel(reel)}
                     className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-stone-200 hover:border-[#D4AF37] hover:shadow-lg transition-all"
                   >
-                    {reel.thumbnail ? (
+                    {cardThumb ? (
                       <img
-                        src={reel.thumbnail}
+                        src={cardThumb}
                         alt={reel.title}
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                     ) : (
@@ -300,7 +306,8 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                       <Play className="w-4 h-4 ml-0.5 fill-[#064E3B]" />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -80,6 +80,16 @@ export function getInstagramEmbedUrl(url: string | null | undefined): string | n
   return extractInstagramInfo(url)?.embedUrl || null;
 }
 
+export function getInstagramStreamUrl(url: string | null | undefined): string | null {
+  if (!url || !isInstagramUrl(url)) return null;
+  return `/api/instagram/stream?url=${encodeURIComponent(url.trim())}`;
+}
+
+export function getInstagramThumbUrl(url: string | null | undefined): string | null {
+  if (!url || !isInstagramUrl(url)) return null;
+  return `/api/instagram/thumb?url=${encodeURIComponent(url.trim())}`;
+}
+
 export function isInstagramUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   return !!extractInstagramInfo(url) || /instagram\.com|instagr\.am/i.test(url);
@@ -102,5 +112,7 @@ export function resolveMediaThumbnail(thumbnail: string | null | undefined, medi
   }
   const yt = extractYouTubeThumbnail(mediaUrl);
   if (yt) return yt;
+  const igThumb = getInstagramThumbUrl(mediaUrl);
+  if (igThumb) return igThumb;
   return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
 }

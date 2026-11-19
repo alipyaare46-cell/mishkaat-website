@@ -4,7 +4,13 @@ import { Reel, Scholar, ViewLogItem } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
 import { InstagramVideoEmbed } from '../../components/InstagramVideoEmbed';
-import { extractYouTubeThumbnail, isInstagramUrl, getInstagramEmbedUrl } from '../../utils/media';
+import {
+  extractYouTubeThumbnail,
+  isInstagramUrl,
+  getInstagramEmbedUrl,
+  getInstagramStreamUrl,
+  getInstagramThumbUrl
+} from '../../utils/media';
 
 interface AdminReelsProps {
   reels: Reel[];
@@ -40,6 +46,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
   const [thumbnail, setThumbnail] = useState('');
   const [duration, setDuration] = useState('');
   const [isPublished, setIsPublished] = useState(true);
+  const [igPreviewFailed, setIgPreviewFailed] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -593,6 +600,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                       onChange={(e) => {
                         const val = e.target.value;
                         setVideoUrl(val);
+                        setIgPreviewFailed(false);
                         const ytThumb = extractYouTubeThumbnail(val);
                         if (ytThumb && (!thumbnail || thumbnail.includes('google.com') || !thumbnail.trim())) {
                           setThumbnail(ytThumb);
@@ -611,9 +619,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                       <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 mt-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>
-                          {getInstagramEmbedUrl(videoUrl)
-                            ? 'Instagram Reel / Video recognized & ready to embed!'
-                            : 'Instagram link detected — please use a direct /reel/ or /p/ URL.'}
+                          Instagram Reel recognized &amp; ready to play directly on MISHKAAT!
                         </span>
                       </p>
                     )}
@@ -650,7 +656,18 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                           <span>YouTube Reel Linked</span>
                         </div>
                       ) : isInstagramUrl(videoUrl) ? (
-                        getInstagramEmbedUrl(videoUrl) ? (
+                        getInstagramStreamUrl(videoUrl) && !igPreviewFailed ? (
+                          <video
+                            key={videoUrl}
+                            src={getInstagramStreamUrl(videoUrl)!}
+                            poster={getInstagramThumbUrl(videoUrl) || undefined}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            onError={() => setIgPreviewFailed(true)}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : getInstagramEmbedUrl(videoUrl) ? (
                           <InstagramVideoEmbed
                             embedUrl={getInstagramEmbedUrl(videoUrl)!}
                             title="Instagram Reel Preview"
