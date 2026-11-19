@@ -45,6 +45,7 @@ export interface Reel {
   video_url: string;
   thumbnail: string | null;
   duration: string;
+  views_count?: number;
   is_published: number;
   created_at: string;
   updated_at: string;
@@ -187,6 +188,8 @@ export interface WebsiteStats {
     shayariyan: number;
     scholars: number;
   };
+  websiteViews?: number;
+  totalReelViews?: number;
 }
 
 export interface AdminUser {

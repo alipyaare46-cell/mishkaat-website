@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as LinkIcon, FileVideo, CheckCircle2 } from 'lucide-react';
+import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as LinkIcon, FileVideo, CheckCircle2, Eye } from 'lucide-react';
 import { Reel, Scholar } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
@@ -241,6 +241,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                 <th className="py-3 px-4">Title</th>
                 <th className="py-3 px-4">Scholar</th>
                 <th className="py-3 px-4">Duration</th>
+                <th className="py-3 px-4">Views</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -256,6 +257,12 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                   </td>
                   <td className="py-3 px-4 text-stone-500 whitespace-nowrap">
                     {r.duration || 'Short'}
+                  </td>
+                  <td className="py-3 px-4 text-stone-700 font-mono whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 text-xs">
+                      <Eye className="w-3.5 h-3.5 text-[#064E3B]" />
+                      <span>{(r.views_count ?? 0).toLocaleString()}</span>
+                    </span>
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap">
                     <button

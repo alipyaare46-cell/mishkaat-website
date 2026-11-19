@@ -75,12 +75,20 @@ export function initDatabase() {
       video_url TEXT NOT NULL,
       thumbnail TEXT,
       duration TEXT,
+      views_count INTEGER DEFAULT 0,
       is_published INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (scholar_id) REFERENCES scholars(id) ON DELETE CASCADE
     );
   `);
+
+  // Safe migration for existing databases missing views_count on reels
+  try {
+    db.exec(`ALTER TABLE reels ADD COLUMN views_count INTEGER DEFAULT 0`);
+  } catch {
+    // Column already exists
+  }
 
   // 5. Book Categories table
   db.exec(`
@@ -291,8 +299,22 @@ export function initDatabase() {
     );
   `);
 
+  // 20. Member Password Reset OTPs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_reset_otps (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      used INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+
   // Create indexes for fast searching and relations
   db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_otp_email ON password_reset_otps(email);
     CREATE INDEX IF NOT EXISTS idx_contact_created ON contact_messages(created_at);
     CREATE INDEX IF NOT EXISTS idx_speeches_scholar ON speeches(scholar_id);
     CREATE INDEX IF NOT EXISTS idx_speeches_published ON speeches(is_published);
@@ -315,6 +337,7 @@ export function initDatabase() {
     contact_phone: '+91 (0) 22 2847 0000',
     contact_address: 'Mishkaat Islamic Knowledge Foundation, Mumbai, India',
     footer_tagline: 'Illuminating Hearts with Authentic Islamic Knowledge and Ahl-e-Sunnat Heritage.',
+    site_views: '0',
     show_hero_cta: 'true',
     show_stats_dashboard: 'true',
     show_featured_scholars: 'true',

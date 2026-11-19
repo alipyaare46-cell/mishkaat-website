@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, ArrowRight, Play, ExternalLink, Calendar, Clock, Bookmark } from 'lucide-react';
+import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, ArrowRight, Play, ExternalLink, Calendar, Clock, Bookmark, Eye } from 'lucide-react';
 import { Scholar, Speech, Reel, Book, Article, Aqwaal, Shayariyan, WebsiteSettings, WebsiteStats } from '../types';
 import madinahHeroImg from '../assets/images/madinah_munawwarah_hero_1793189667524.jpg';
 import { useLanguage } from '../context/LanguageContext';
@@ -135,7 +135,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { label: t.totalSpeeches, count: stats?.published.speeches ?? 0, icon: Volume2, route: 'speeches' },
                 { label: t.totalReels, count: stats?.published.reels ?? 0, icon: Film, route: 'reels' },
@@ -144,6 +144,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 { label: t.totalAqwaal, count: stats?.published.aqwaal ?? 0, icon: Quote, route: 'aqwaal' },
                 { label: t.totalShayariyan, count: stats?.published.shayariyan ?? 0, icon: Feather, route: 'shayariyan' },
                 { label: t.totalScholars, count: stats?.published.scholars ?? 0, icon: Users, route: 'speeches' },
+                { label: t.websiteViews, count: stats?.websiteViews ?? 0, icon: Eye, route: 'home' },
               ].map((item, idx) => {
                 const Icon = item.icon;
                 return (
@@ -154,7 +155,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   >
                     <Icon className="w-4 h-4 text-[#064E3B] mb-1.5 group-hover:scale-110 transition-transform" />
                     <div className="text-xl sm:text-2xl font-bold font-mono text-stone-900 tabular-nums">
-                      {item.count}
+                      {Number(item.count).toLocaleString()}
                     </div>
                     <div className="text-[11px] text-stone-500 font-medium truncate mt-0.5">
                       {item.label}
@@ -442,6 +443,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight">
                           {reel.title}
                         </h4>
+                        <div className="flex items-center gap-1 text-[10px] text-stone-300 font-mono pt-0.5">
+                          <Eye className="w-3 h-3 text-[#D4AF37]" />
+                          <span>{(reel.views_count ?? 0).toLocaleString()} views</span>
+                        </div>
                       </div>
                     </div>
 

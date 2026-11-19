@@ -166,6 +166,37 @@ function MainApp() {
     fetchAllData();
   }, [fetchAllData]);
 
+  // Increment website view count once per browser session on public site
+  useEffect(() => {
+    if (currentRoute === 'admin') return;
+    if (sessionStorage.getItem('mishkaat_site_viewed')) return;
+    sessionStorage.setItem('mishkaat_site_viewed', '1');
+    api.incrementSiteView()
+      .then((res) => {
+        setStats((prev) => (prev ? { ...prev, websiteViews: res.websiteViews } : prev));
+      })
+      .catch(() => {
+        sessionStorage.removeItem('mishkaat_site_viewed');
+      });
+  }, [currentRoute]);
+
+  const handleReelViewed = useCallback((reelId: string, viewsCount: number) => {
+    setReels((prev) =>
+      prev.map((item) => (item.id === reelId ? { ...item, views_count: viewsCount } : item))
+    );
+    setActiveReel((prev) =>
+      prev && prev.id === reelId ? { ...prev, views_count: viewsCount } : prev
+    );
+    setStats((prev) =>
+      prev
+        ? {
+            ...prev,
+            totalReelViews: (prev.totalReelViews ?? 0) + 1
+          }
+        : prev
+    );
+  }, []);
+
   // Handle browser Back and Forward navigation buttons
   useEffect(() => {
     const handlePopState = () => {
@@ -391,6 +422,7 @@ function MainApp() {
         reels={reels}
         onClose={() => setActiveReel(null)}
         onSelectReel={(r) => setActiveReel(r)}
+        onReelViewed={handleReelViewed}
       />
 
       <BookReaderModal

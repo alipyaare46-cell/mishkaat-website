@@ -253,6 +253,10 @@ export const api = {
       body: JSON.stringify(settings)
     }),
   getStats: () => request<WebsiteStats>('/stats'),
+  incrementSiteView: () =>
+    request<{ websiteViews: number }>('/stats/view', {
+      method: 'POST'
+    }),
 
   // Scholars
   getScholars: (all = false, search = '') => {
@@ -324,6 +328,10 @@ export const api = {
   deleteReel: (id: string) =>
     request<{ success: boolean }>(`/reels/${id}`, {
       method: 'DELETE'
+    }),
+  incrementReelView: (id: string) =>
+    request<{ id: string; views_count: number }>(`/reels/${id}/view`, {
+      method: 'POST'
     }),
 
   // Books
@@ -471,6 +479,16 @@ export const api = {
     }),
   userLogin: (data: { email: string; password: string }) =>
     request<{ token: string; user: MemberUser }>('/user/login', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  userForgotPassword: (email: string) =>
+    request<{ success: boolean; message: string }>('/user/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    }),
+  userResetPassword: (data: { email: string; otp: string; newPassword: string }) =>
+    request<{ success: boolean; message: string; token: string; user: MemberUser }>('/user/reset-password', {
       method: 'POST',
       body: JSON.stringify(data)
     }),

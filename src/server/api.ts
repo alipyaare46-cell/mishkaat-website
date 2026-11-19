@@ -4,8 +4,9 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import nodemailer from 'nodemailer';
 import { db, generateId } from './db';
-import { syncRecordToTurso, syncDeleteFromTurso, syncDeleteWhereFromTurso } from './turso';
+import { getTursoClient, syncRecordToTurso, syncDeleteFromTurso, syncDeleteWhereFromTurso } from './turso';
 
 export const apiRouter = Router();
 
@@ -132,6 +133,131 @@ function checkRateLimit(ip: string): boolean {
   }
   entry.count++;
   return true;
+}
+
+const otpAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function checkOtpRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = otpAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    otpAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return true;
+  }
+  if (entry.count >= 5) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+
+interface DbMemberUser {
+  id: string;
+  full_name: string;
+  email: string;
+  password_hash: string;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+async function findMemberByEmail(cleanEmail: string): Promise<DbMemberUser | undefined> {
+  const localUser = db
+    .prepare('SELECT * FROM users WHERE lower(email) = ? LIMIT 1')
+    .get(cleanEmail) as DbMemberUser | undefined;
+  if (localUser) return localUser;
+
+  const client = getTursoClient();
+  if (!client) return undefined;
+
+  try {
+    const res = await client.execute({
+      sql: 'SELECT * FROM users WHERE lower(email) = ? LIMIT 1',
+      args: [cleanEmail]
+    });
+    if (res.rows.length === 0) return undefined;
+
+    const row = res.rows[0] as any;
+    const cloudUser: DbMemberUser = {
+      id: String(row.id),
+      full_name: String(row.full_name),
+      email: String(row.email).toLowerCase(),
+      password_hash: String(row.password_hash),
+      avatar_url: row.avatar_url ? String(row.avatar_url) : null,
+      bio: row.bio ? String(row.bio) : null,
+      created_at: row.created_at ? String(row.created_at) : new Date().toISOString(),
+      updated_at: row.updated_at ? String(row.updated_at) : new Date().toISOString()
+    };
+
+    db.prepare(`
+      INSERT OR REPLACE INTO users (id, full_name, email, password_hash, avatar_url, bio, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      cloudUser.id,
+      cloudUser.full_name,
+      cloudUser.email,
+      cloudUser.password_hash,
+      cloudUser.avatar_url,
+      cloudUser.bio,
+      cloudUser.created_at,
+      cloudUser.updated_at
+    );
+
+    return cloudUser;
+  } catch (err) {
+    console.warn('[User Lookup] Turso fallback check failed:', (err as Error).message);
+    return undefined;
+  }
+}
+
+async function sendOtpEmail(toEmail: string, fullName: string, otp: string): Promise<void> {
+  const smtpUser = (process.env.SMTP_USER || process.env.GMAIL_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim();
+  const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+  const smtpPort = Number(process.env.SMTP_PORT || 465);
+  const smtpFrom = (process.env.SMTP_FROM || (smtpUser ? `MISHKAAT <${smtpUser}>` : '')).trim();
+
+  if (!smtpUser || !smtpPass) {
+    const err = new Error(
+      'Gmail OTP service is not configured yet on server. Please set SMTP_USER and SMTP_PASS (Gmail App Password) in environment variables.'
+    ) as Error & { code?: string };
+    err.code = 'SMTP_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass
+    }
+  });
+
+  await transporter.sendMail({
+    from: smtpFrom,
+    to: toEmail,
+    subject: 'MISHKAAT - Password Reset OTP Code',
+    text: `Assalamu Alaikum ${fullName || 'Member'},\n\nYour MISHKAAT password reset OTP code is: ${otp}\n\nThis code is valid for 10 minutes. Do not share this code with anyone.\n\nIf you did not request a password reset, please ignore this email.\n\n- MISHKAAT Islamic Knowledge & Media Platform`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <div style="background-color: #064E3B; padding: 20px 24px; color: #ffffff;">
+          <p style="margin: 0; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #D4AF37; font-weight: bold;">MISHKAAT • مشکوٰۃ</p>
+          <h2 style="margin: 6px 0 0; font-size: 20px;">Password Reset OTP</h2>
+        </div>
+        <div style="padding: 24px; background-color: #ffffff; color: #1c1917;">
+          <p style="margin-top: 0; font-size: 14px;">Assalamu Alaikum <strong>${fullName || 'Member'}</strong>,</p>
+          <p style="font-size: 14px; line-height: 1.6;">Use the 6-digit verification code below to reset your MISHKAAT account password:</p>
+          <div style="margin: 20px 0; padding: 16px; background-color: #F4F8F4; border: 1px dashed #064E3B; border-radius: 10px; text-align: center;">
+            <span style="font-size: 30px; font-weight: bold; letter-spacing: 8px; color: #064E3B; font-family: monospace;">${otp}</span>
+          </div>
+          <p style="font-size: 12px; color: #57534e; margin-bottom: 0;">This OTP expires in <strong>10 minutes</strong>. For your security, never share this code with anyone.</p>
+        </div>
+      </div>
+    `
+  });
 }
 
 // Admin Auth Middleware
@@ -310,6 +436,12 @@ apiRouter.post('/admin/change-password', requireAdmin, (req, res) => {
     UPDATE admins SET password_hash = ?, updated_at = datetime('now') WHERE id = ?
   `).run(newHash, admin.admin_id);
 
+  // Persist updated admin credentials to Turso Cloud
+  const updatedAdmin = db.prepare('SELECT * FROM admins WHERE id = ?').get(admin.admin_id) as Record<string, any> | undefined;
+  if (updatedAdmin) {
+    syncRecordToTurso('admins', updatedAdmin).catch(() => {});
+  }
+
   // Invalidate other sessions
   const currentToken = req.headers.authorization?.split(' ')[1];
   db.prepare('DELETE FROM admin_sessions WHERE admin_id = ? AND token != ?').run(admin.admin_id, currentToken);
@@ -355,6 +487,11 @@ apiRouter.post('/user/register', (req, res) => {
       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(userId, full_name.trim(), cleanEmail, hash);
 
+    const fullUser = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as Record<string, any> | undefined;
+    if (fullUser) {
+      syncRecordToTurso('users', fullUser).catch(() => {});
+    }
+
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
     db.prepare(`
@@ -377,7 +514,7 @@ apiRouter.post('/user/register', (req, res) => {
   }
 });
 
-apiRouter.post('/user/login', (req, res) => {
+apiRouter.post('/user/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' });
@@ -385,14 +522,7 @@ apiRouter.post('/user/login', (req, res) => {
   }
 
   const cleanEmail = String(email).trim().toLowerCase();
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(cleanEmail) as {
-    id: string;
-    full_name: string;
-    email: string;
-    password_hash: string;
-    avatar_url: string | null;
-    bio: string | null;
-  } | undefined;
+  const user = await findMemberByEmail(cleanEmail);
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Incorrect email or password' });
@@ -407,6 +537,161 @@ apiRouter.post('/user/login', (req, res) => {
   `).run(token, user.id, expiresAt);
 
   res.json({
+    token,
+    user: {
+      id: user.id,
+      full_name: user.full_name,
+      email: user.email,
+      avatar_url: user.avatar_url,
+      bio: user.bio
+    }
+  });
+});
+
+apiRouter.post('/user/forgot-password', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+
+  if (!rawEmail || !rawEmail.includes('@') || !rawEmail.includes('.')) {
+    res.status(400).json({ error: 'Please enter a valid Gmail or email address' });
+    return;
+  }
+
+  if (!checkOtpRateLimit(`otp:${ip}:${rawEmail}`)) {
+    res.status(429).json({ error: 'Too many OTP requests. Please wait 15 minutes before trying again.' });
+    return;
+  }
+
+  const user = await findMemberByEmail(rawEmail);
+  if (!user) {
+    res.status(404).json({
+      error: `No account found for ${rawEmail}. Please create an account first using "Create Account".`
+    });
+    return;
+  }
+
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+  const otpId = generateId('otp');
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  // Invalidate previous unused OTPs for this email
+  db.prepare('UPDATE password_reset_otps SET used = 1 WHERE email = ? AND used = 0').run(rawEmail);
+  db.prepare(`
+    INSERT INTO password_reset_otps (id, email, otp_hash, expires_at, attempts, used, created_at)
+    VALUES (?, ?, ?, ?, 0, 0, datetime('now'))
+  `).run(otpId, rawEmail, otpHash, expiresAt);
+
+  try {
+    await sendOtpEmail(user.email, user.full_name, otp);
+    res.json({
+      success: true,
+      message: `6-digit OTP has been sent to ${user.email}. Please check your Gmail Inbox or Spam folder.`
+    });
+  } catch (err: any) {
+    db.prepare('DELETE FROM password_reset_otps WHERE id = ?').run(otpId);
+    console.error('[Forgot Password OTP Error]', err.message);
+    if (err.code === 'SMTP_NOT_CONFIGURED') {
+      res.status(503).json({
+        error: 'Gmail OTP email service is not configured yet on the server (missing SMTP_USER / SMTP_PASS). Please contact the site administrator to enable Gmail SMTP.'
+      });
+      return;
+    }
+    res.status(500).json({
+      error: 'Failed to send OTP email. Please verify Gmail SMTP configuration and try again.'
+    });
+  }
+});
+
+apiRouter.post('/user/reset-password', (req, res) => {
+  const cleanEmail = String(req.body?.email || '').trim().toLowerCase();
+  const cleanOtp = String(req.body?.otp || '').replace(/\s+/g, '');
+  const newPassword = String(req.body?.newPassword || '');
+
+  if (!cleanEmail || !cleanOtp || !newPassword) {
+    res.status(400).json({ error: 'Email, 6-digit OTP, and new password are required' });
+    return;
+  }
+
+  if (!/^\d{6}$/.test(cleanOtp)) {
+    res.status(400).json({ error: 'Please enter a valid 6-digit OTP code' });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    return;
+  }
+
+  const otpRecord = db.prepare(`
+    SELECT * FROM password_reset_otps
+    WHERE email = ? AND used = 0
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(cleanEmail) as {
+    id: string;
+    email: string;
+    otp_hash: string;
+    expires_at: number;
+    attempts: number;
+    used: number;
+  } | undefined;
+
+  if (!otpRecord) {
+    res.status(400).json({ error: 'No active OTP found. Please request a new OTP.' });
+    return;
+  }
+
+  if (Date.now() > otpRecord.expires_at) {
+    db.prepare('UPDATE password_reset_otps SET used = 1 WHERE id = ?').run(otpRecord.id);
+    res.status(400).json({ error: 'OTP has expired. Please request a new OTP.' });
+    return;
+  }
+
+  if (otpRecord.attempts >= 5) {
+    db.prepare('UPDATE password_reset_otps SET used = 1 WHERE id = ?').run(otpRecord.id);
+    res.status(429).json({ error: 'Too many invalid OTP attempts. Please request a new OTP.' });
+    return;
+  }
+
+  const candidateHash = crypto.createHash('sha256').update(cleanOtp).digest('hex');
+  const hashMatches = crypto.timingSafeEqual(
+    Buffer.from(candidateHash, 'utf8'),
+    Buffer.from(otpRecord.otp_hash, 'utf8')
+  );
+
+  if (!hashMatches) {
+    db.prepare('UPDATE password_reset_otps SET attempts = attempts + 1 WHERE id = ?').run(otpRecord.id);
+    res.status(400).json({ error: 'Invalid OTP code. Please check your Gmail and try again.' });
+    return;
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE lower(email) = ? LIMIT 1').get(cleanEmail) as DbMemberUser | undefined;
+  if (!user) {
+    res.status(404).json({ error: 'User account not found.' });
+    return;
+  }
+
+  const newHash = bcrypt.hashSync(newPassword, 10);
+  db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(newHash, user.id);
+  db.prepare('UPDATE password_reset_otps SET used = 1 WHERE id = ?').run(otpRecord.id);
+  db.prepare('DELETE FROM user_sessions WHERE user_id = ?').run(user.id);
+
+  const fullUpdatedUser = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as Record<string, any> | undefined;
+  if (fullUpdatedUser) {
+    syncRecordToTurso('users', fullUpdatedUser).catch(() => {});
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+  db.prepare(`
+    INSERT INTO user_sessions (token, user_id, expires_at, created_at)
+    VALUES (?, ?, ?, datetime('now'))
+  `).run(token, user.id, expiresAt);
+
+  res.json({
+    success: true,
+    message: 'Password reset successfully! You are now signed in.',
     token,
     user: {
       id: user.id,
@@ -468,6 +753,11 @@ apiRouter.put('/user/profile', requireUser, (req, res) => {
   } else {
     db.prepare(`UPDATE users SET full_name = ?, bio = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(full_name.trim(), bio || '', sessionUser.user_id);
+  }
+
+  const fullUser = db.prepare('SELECT * FROM users WHERE id = ?').get(sessionUser.user_id) as Record<string, any> | undefined;
+  if (fullUser) {
+    syncRecordToTurso('users', fullUser).catch(() => {});
   }
 
   const updated = db.prepare('SELECT id, full_name, email, avatar_url, bio FROM users WHERE id = ?').get(sessionUser.user_id);
@@ -801,6 +1091,11 @@ apiRouter.get('/stats', (_req, res) => {
   const totalShayariyan = db.prepare('SELECT count(*) as c FROM shayariyan').get() as { c: number };
   const totalScholars = db.prepare('SELECT count(*) as c FROM scholars').get() as { c: number };
 
+  const siteViewsRow = db.prepare("SELECT value FROM website_settings WHERE key = 'site_views'").get() as { value: string } | undefined;
+  const websiteViews = Number(siteViewsRow?.value || 0);
+  const reelViewsRow = db.prepare('SELECT COALESCE(SUM(COALESCE(views_count, 0)), 0) as totalViews FROM reels').get() as { totalViews: number };
+  const totalReelViews = Number(reelViewsRow?.totalViews || 0);
+
   res.json({
     published: {
       speeches: speechesCount.c,
@@ -819,8 +1114,27 @@ apiRouter.get('/stats', (_req, res) => {
       aqwaal: totalAqwaal.c,
       shayariyan: totalShayariyan.c,
       scholars: totalScholars.c
-    }
+    },
+    websiteViews,
+    totalReelViews
   });
+});
+
+apiRouter.post('/stats/view', (_req, res) => {
+  try {
+    db.prepare(`
+      INSERT INTO website_settings (key, value)
+      VALUES ('site_views', '1')
+      ON CONFLICT(key) DO UPDATE SET value = CAST(COALESCE(CAST(value AS INTEGER), 0) + 1 AS TEXT)
+    `).run();
+
+    const row = db.prepare("SELECT value FROM website_settings WHERE key = 'site_views'").get() as { value: string } | undefined;
+    const websiteViews = Number(row?.value || 1);
+    syncRecordToTurso('website_settings', { key: 'site_views', value: String(websiteViews) }).catch(() => {});
+    res.json({ websiteViews });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to track website view' });
+  }
 });
 
 // -------------------------------------------------------------
@@ -1121,6 +1435,24 @@ apiRouter.get('/reels/:id', (req, res) => {
     return;
   }
   res.json(reel);
+});
+
+apiRouter.post('/reels/:id/view', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM reels WHERE id = ?').get(id) as { id: string } | undefined;
+  if (!existing) {
+    res.status(404).json({ error: 'Reel not found' });
+    return;
+  }
+
+  db.prepare('UPDATE reels SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?').run(id);
+  const updated = db.prepare('SELECT * FROM reels WHERE id = ?').get(id) as Record<string, any>;
+  syncRecordToTurso('reels', updated).catch(() => {});
+
+  res.json({
+    id: updated.id,
+    views_count: Number(updated.views_count || 0)
+  });
 });
 
 apiRouter.post('/reels', requireAdmin, (req, res) => {

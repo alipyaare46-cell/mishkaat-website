@@ -17,7 +17,8 @@ import {
   RotateCcw,
   RotateCw,
   Gauge,
-  Download
+  Download,
+  Eye
 } from 'lucide-react';
 import { Reel } from '../types';
 import { api } from '../services/api';
@@ -37,6 +38,7 @@ interface ReelPlayerModalProps {
   onPrev?: () => void;
   hasNext?: boolean;
   hasPrev?: boolean;
+  onReelViewed?: (reelId: string, viewsCount: number) => void;
 }
 
 export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
@@ -48,7 +50,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   onNext,
   onPrev,
   hasNext,
-  hasPrev
+  hasPrev,
+  onReelViewed
 }) => {
   const { user, isBookmarked, toggleBookmark, openAuthModal } = useUserAuth();
   const { admin } = useAuth();
@@ -154,11 +157,32 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (currentReel) {
-      setIsPlaying(true);
-      loadInteractions(currentReel.id);
+    if (!currentReel) return;
+    setIsPlaying(true);
+    loadInteractions(currentReel.id);
+
+    // Track unique reel view once per session
+    try {
+      const raw = sessionStorage.getItem('mishkaat_viewed_reels');
+      const viewedIds: string[] = raw ? JSON.parse(raw) : [];
+      if (!viewedIds.includes(currentReel.id)) {
+        const updatedIds = [...viewedIds, currentReel.id];
+        sessionStorage.setItem('mishkaat_viewed_reels', JSON.stringify(updatedIds));
+        api.incrementReelView(currentReel.id)
+          .then((res) => {
+            setCurrentReel((prev) =>
+              prev && prev.id === currentReel.id ? { ...prev, views_count: res.views_count } : prev
+            );
+            if (onReelViewed) {
+              onReelViewed(currentReel.id, res.views_count);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // Ignore storage errors
     }
-  }, [currentReel?.id, loadInteractions]);
+  }, [currentReel?.id, loadInteractions, onReelViewed]);
 
   // Determine current index and next/prev availability
   const currentIndex = currentReel && reels.length > 0 ? reels.findIndex((r) => r.id === currentReel.id) : -1;
@@ -614,8 +638,21 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             </p>
           </div>
 
-          {/* RIGHT-SIDE ACTION RAIL (YouTube Shorts style: Like, Comments, Save, Share) */}
-          <div className="absolute right-2.5 bottom-16 z-30 flex flex-col items-center gap-4 pointer-events-auto">
+          {/* RIGHT-SIDE ACTION RAIL (YouTube Shorts style: Views, Like, Comments, Save, Share) */}
+          <div className="absolute right-2.5 bottom-16 z-30 flex flex-col items-center gap-3.5 pointer-events-auto">
+            {/* Views Counter */}
+            <div
+              className="flex flex-col items-center"
+              title={`${(currentReel.views_count ?? 0).toLocaleString()} Views`}
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 text-[#D4AF37] backdrop-blur-md border border-white/10">
+                <Eye className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono">
+                {(currentReel.views_count ?? 0).toLocaleString()}
+              </span>
+            </div>
+
             {/* Scholar Avatar Circle if available */}
             {currentReel.scholar_slug && onNavigateScholar && (
               <button

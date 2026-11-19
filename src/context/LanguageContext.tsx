@@ -31,6 +31,8 @@ export interface Translations {
   totalAqwaal: string;
   totalShayariyan: string;
   totalScholars: string;
+  websiteViews: string;
+  reelViews: string;
   featuredScholars: string;
   scholarsSubtitle: string;
   exploreAll: string;
@@ -101,6 +103,8 @@ const translations: Record<Language, Translations> = {
     totalAqwaal: 'Aqwaal',
     totalShayariyan: 'Shayariyan',
     totalScholars: 'Scholars',
+    websiteViews: 'Website Views',
+    reelViews: 'Reel Views',
     featuredScholars: 'Scholars of Ahl-e-Sunnat',
     scholarsSubtitle: 'Eminent Asateza & Mashayekh',
     exploreAll: 'Explore All',
@@ -169,6 +173,8 @@ const translations: Record<Language, Translations> = {
     totalAqwaal: 'اقوالِ حکمت',
     totalShayariyan: 'شاعری و کلام',
     totalScholars: 'علمائے کرام',
+    websiteViews: 'ویب سائٹ ویوز',
+    reelViews: 'ریلز ویوز',
     featuredScholars: 'علمائے اہل سنت والجماعت',
     scholarsSubtitle: 'اساتذہ و مشائخِ عظام',
     exploreAll: 'مکمل فہرست دیکھیں',
@@ -237,6 +243,8 @@ const translations: Record<Language, Translations> = {
     totalAqwaal: 'الأقوال والحكم',
     totalShayariyan: 'القصائد',
     totalScholars: 'العلماء',
+    websiteViews: 'زيارات الموقع',
+    reelViews: 'مشاهدات الريلز',
     featuredScholars: 'علماء أهل السنة والجماعة',
     scholarsSubtitle: 'الأعلام والمشايخ الأجلاء',
     exploreAll: 'عرض الكل',

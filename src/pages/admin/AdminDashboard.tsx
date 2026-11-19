@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, Plus, Settings, Key, ExternalLink, Cloud, CheckCircle2, Download, RefreshCw, Database } from 'lucide-react';
+import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, Plus, Settings, Key, ExternalLink, Cloud, CheckCircle2, Download, RefreshCw, Database, Eye, BarChart3 } from 'lucide-react';
 import { WebsiteStats, AdminUser } from '../../types';
 
 interface AdminDashboardProps {
@@ -124,6 +124,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <Download className="w-3.5 h-3.5 text-[#D4AF37]" />
             <span>Download Backup (.json)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Website & Reels Views Analytics */}
+      <div className="space-y-4">
+        <h3 className="text-xs uppercase tracking-widest text-stone-500 font-bold">
+          Traffic &amp; Views Analytics
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-stone-200/80 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#064E3B] border border-emerald-200 flex items-center justify-center shrink-0">
+                <Eye className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-600 uppercase tracking-wider">
+                  Total Website Views
+                </p>
+                <p className="text-[11px] text-stone-400 mt-0.5">
+                  Cumulative visitor sessions across MISHKAAT
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-[#064E3B] tabular-nums">
+              {(stats?.websiteViews ?? 0).toLocaleString()}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('reels')}
+            className="bg-white p-5 rounded-xl border border-stone-200/80 hover:border-[#D4AF37] shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-[#064E3B] border border-[#D4AF37]/40 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <BarChart3 className="w-5 h-5 text-[#064E3B]" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-stone-600 uppercase tracking-wider">
+                  Total Reel Views
+                </p>
+                <p className="text-[11px] text-stone-400 mt-0.5">
+                  Combined plays across all Islamic Reels
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-stone-900 tabular-nums">
+              {(stats?.totalReelViews ?? 0).toLocaleString()}
+            </div>
           </button>
         </div>
       </div>

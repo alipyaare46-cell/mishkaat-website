@@ -168,6 +168,7 @@ async function ensureTursoSchema(client: Client) {
       video_url TEXT NOT NULL,
       thumbnail TEXT,
       duration TEXT,
+      views_count INTEGER DEFAULT 0,
       is_published INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -296,6 +297,13 @@ async function ensureTursoSchema(client: Client) {
 
   for (const sql of statements) {
     await client.execute(sql);
+  }
+
+  // Safe migration on existing Turso reels table
+  try {
+    await client.execute('ALTER TABLE reels ADD COLUMN views_count INTEGER DEFAULT 0');
+  } catch {
+    // Column already exists on Turso
   }
 }
 

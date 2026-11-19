@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock } from 'lucide-react';
+import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock, Eye } from 'lucide-react';
 import { Scholar, Speech, Reel } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -287,11 +287,13 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                       <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight">
                         {reel.title}
                       </h4>
-                      {reel.duration && (
-                        <span className="text-[10px] text-stone-400 mt-1 block">
-                          {reel.duration}
+                      <div className="flex items-center justify-between text-[10px] text-stone-300 mt-1 font-mono">
+                        <span className="flex items-center gap-1">
+                          <Eye className="w-3 h-3 text-[#D4AF37]" />
+                          <span>{(reel.views_count ?? 0).toLocaleString()}</span>
                         </span>
-                      )}
+                        {reel.duration && <span>{reel.duration}</span>}
+                      </div>
                     </div>
 
                     <div className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-[#D4AF37] text-[#064E3B] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

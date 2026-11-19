@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Film, Play, Search, User, Filter, ArrowRight } from 'lucide-react';
+import { Film, Play, Search, User, Filter, ArrowRight, Eye } from 'lucide-react';
 import { Reel, Scholar } from '../types';
 
 interface ReelsPageProps {
@@ -79,9 +79,15 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <span className="text-xs text-stone-400 font-mono">
               {filteredReels.length} {filteredReels.length === 1 ? 'Reel' : 'Reels'}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-[#D4AF37] font-mono bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
+              <Eye className="w-3.5 h-3.5" />
+              <span>
+                {filteredReels.reduce((acc, r) => acc + (r.views_count ?? 0), 0).toLocaleString()} Total Views
+              </span>
             </span>
           </div>
         </div>
@@ -202,6 +208,10 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
                     <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight group-hover:text-emerald-300 transition-colors">
                       {reel.title}
                     </h4>
+                    <div className="flex items-center gap-1 text-[10px] text-stone-300 font-mono pt-0.5">
+                      <Eye className="w-3 h-3 text-[#D4AF37]" />
+                      <span>{(reel.views_count ?? 0).toLocaleString()} views</span>
+                    </div>
                   </div>
                 </div>
 
