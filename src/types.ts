@@ -240,4 +240,30 @@ export interface ContactMessage {
   created_at: string;
 }
 
+export interface ViewLogItem {
+  id: string;
+  target_type: 'website' | 'reel';
+  target_id: string | null;
+  target_title: string | null;
+  user_id: string | null;
+  viewer_name: string | null;
+  viewer_email: string | null;
+  viewer_type: 'member' | 'admin' | 'guest';
+  device_info: string | null;
+  ip_address: string | null;
+  page_path: string | null;
+  created_at: string;
+}
+
+export interface ViewersResponse {
+  logs: ViewLogItem[];
+  summary: {
+    totalLogs: number;
+    memberViews: number;
+    guestViews: number;
+    websiteViewLogs: number;
+    reelViewLogs: number;
+    uniqueMembers: number;
+  };
+}
 

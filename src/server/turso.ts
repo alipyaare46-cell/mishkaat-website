@@ -57,7 +57,8 @@ export const SYNC_TABLES = [
   'users',
   'likes',
   'comments',
-  'contact_messages'
+  'contact_messages',
+  'view_logs'
 ];
 
 export function getTursoClient(): Client | null {
@@ -291,6 +292,20 @@ async function ensureTursoSchema(client: Client) {
       subject TEXT,
       message TEXT NOT NULL,
       is_read INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS view_logs (
+      id TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      target_title TEXT,
+      user_id TEXT,
+      viewer_name TEXT,
+      viewer_email TEXT,
+      viewer_type TEXT NOT NULL,
+      device_info TEXT,
+      ip_address TEXT,
+      page_path TEXT,
       created_at TEXT NOT NULL
     );`
   ];

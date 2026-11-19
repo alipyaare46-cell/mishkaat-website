@@ -135,9 +135,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-stone-200/80 shadow-xs flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setActiveTab('viewers')}
+            className="bg-white p-5 rounded-xl border border-stone-200/80 hover:border-[#D4AF37] shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
+          >
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#064E3B] border border-emerald-200 flex items-center justify-center shrink-0">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#064E3B] border border-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Eye className="w-5 h-5" />
               </div>
               <div>
@@ -145,14 +149,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   Total Website Views
                 </p>
                 <p className="text-[11px] text-stone-400 mt-0.5">
-                  Cumulative visitor sessions across MISHKAAT
+                  Cumulative visits · <span className="text-[#064E3B] font-semibold">See Who Viewed →</span>
                 </p>
               </div>
             </div>
             <div className="text-2xl sm:text-3xl font-bold font-mono text-[#064E3B] tabular-nums">
               {(stats?.websiteViews ?? 0).toLocaleString()}
             </div>
-          </div>
+          </button>
 
           <button
             type="button"

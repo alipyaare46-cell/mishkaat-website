@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as LinkIcon, FileVideo, CheckCircle2, Eye } from 'lucide-react';
-import { Reel, Scholar } from '../../types';
+import { Reel, Scholar, ViewLogItem } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
+import { InstagramVideoEmbed } from '../../components/InstagramVideoEmbed';
 import { extractYouTubeThumbnail, isInstagramUrl, getInstagramEmbedUrl } from '../../utils/media';
 
 interface AdminReelsProps {
@@ -41,6 +42,29 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
   const [isPublished, setIsPublished] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Per-reel viewer inspection modal
+  const [inspectingReel, setInspectingReel] = useState<Reel | null>(null);
+  const [reelViewLogs, setReelViewLogs] = useState<ViewLogItem[]>([]);
+  const [isLoadingReelViewers, setIsLoadingReelViewers] = useState(false);
+
+  const openReelViewersModal = async (reel: Reel) => {
+    setInspectingReel(reel);
+    setReelViewLogs([]);
+    setIsLoadingReelViewers(true);
+    try {
+      const res = await api.getAdminViewers({
+        target_type: 'reel',
+        target_id: reel.id,
+        limit: 200
+      });
+      setReelViewLogs(res.logs);
+    } catch {
+      setReelViewLogs([]);
+    } finally {
+      setIsLoadingReelViewers(false);
+    }
+  };
 
   const openCreateModal = () => {
     setEditingReel(null);
@@ -259,10 +283,15 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                     {r.duration || 'Short'}
                   </td>
                   <td className="py-3 px-4 text-stone-700 font-mono whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => openReelViewersModal(r)}
+                      className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-md hover:bg-emerald-50 text-[#064E3B] font-semibold transition-colors cursor-pointer tabular-nums"
+                      title="Click to see who viewed this reel"
+                    >
                       <Eye className="w-3.5 h-3.5 text-[#064E3B]" />
                       <span>{(r.views_count ?? 0).toLocaleString()}</span>
-                    </span>
+                    </button>
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap">
                     <button
@@ -622,11 +651,9 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                         </div>
                       ) : isInstagramUrl(videoUrl) ? (
                         getInstagramEmbedUrl(videoUrl) ? (
-                          <iframe
-                            src={getInstagramEmbedUrl(videoUrl)!}
+                          <InstagramVideoEmbed
+                            embedUrl={getInstagramEmbedUrl(videoUrl)!}
                             title="Instagram Reel Preview"
-                            className="w-full h-full border-0 bg-white"
-                            allowFullScreen
                           />
                         ) : (
                           <div className="p-3 text-center text-white text-[11px]">
@@ -745,6 +772,97 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
         onConfirm={confirmDeleteReel}
         onCancel={() => setReelToDelete(null)}
       />
+
+      {/* Who Viewed This Reel Modal */}
+      {inspectingReel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          onClick={() => setInspectingReel(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-[#064E3B] text-white flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-bold">
+                  Reel Viewers
+                </p>
+                <h3 className="text-sm font-bold truncate">
+                  {inspectingReel.title} ({(inspectingReel.views_count ?? 0).toLocaleString()} views)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingReel(null)}
+                className="text-emerald-200 hover:text-white cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              {isLoadingReelViewers ? (
+                <div className="py-10 text-center text-xs text-stone-500">
+                  Loading reel viewers...
+                </div>
+              ) : reelViewLogs.length === 0 ? (
+                <div className="py-10 text-center text-xs text-stone-500">
+                  <Eye className="w-7 h-7 text-stone-300 mx-auto mb-2" />
+                  <p className="font-semibold text-stone-700">No individual view logs yet for this reel</p>
+                  <p className="text-[11px] text-stone-400 mt-1">
+                    Signed-in members and guest visits will appear here as people watch this reel.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3">Viewer</th>
+                      <th className="py-2.5 px-3">Device</th>
+                      <th className="py-2.5 px-3">IP Address</th>
+                      <th className="py-2.5 px-3 text-right">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {reelViewLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-stone-50/70">
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-stone-900">
+                            {log.viewer_name || 'Guest Visitor'}
+                          </div>
+                          {log.viewer_email ? (
+                            <div className="text-[11px] text-[#064E3B] font-mono">
+                              {log.viewer_email}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-stone-400">Guest Visitor</div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-stone-600 whitespace-nowrap">
+                          {log.device_info || 'Unknown'}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-stone-500 tabular-nums whitespace-nowrap">
+                          {log.ip_address || 'unknown'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-[11px] text-stone-500 tabular-nums whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

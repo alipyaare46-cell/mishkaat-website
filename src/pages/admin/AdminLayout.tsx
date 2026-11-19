@@ -14,7 +14,8 @@ import {
   ExternalLink,
   Menu,
   X,
-  Mail
+  Mail,
+  Eye
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { WebsiteStats, Scholar, Speech, Reel, Book, BookCategory, Article, ArticleCategory, Aqwaal, AqwaalCategory, Shayariyan, WebsiteSettings } from '../../types';
@@ -29,6 +30,7 @@ import { AdminShayariyan } from './AdminShayariyan';
 import { AdminContactMessages } from './AdminContactMessages';
 import { AdminSettings } from './AdminSettings';
 import { AdminSecurity } from './AdminSecurity';
+import { AdminViewers } from './AdminViewers';
 
 
 interface AdminLayoutProps {
@@ -85,6 +87,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'articles', label: 'Articles & Research', icon: FileText, count: articles.length },
     { id: 'aqwaal', label: 'Aqwaal & Nasihat', icon: Quote, count: aqwaal.length },
     { id: 'shayariyan', label: 'Shayariyan & Sharah', icon: Feather, count: shayariyan.length },
+    { id: 'viewers', label: 'Viewer Activity (Who Viewed)', icon: Eye },
     { id: 'messages', label: 'Visitor Inquiries', icon: Mail },
     { id: 'settings', label: 'Website Settings', icon: Settings },
     { id: 'security', label: 'Security & Password', icon: ShieldCheck },
@@ -263,6 +266,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               shayariyan={shayariyan}
               onRefresh={onRefreshAll}
             />
+          )}
+
+          {activeTab === 'viewers' && (
+            <AdminViewers reels={reels} />
           )}
 
           {activeTab === 'messages' && (

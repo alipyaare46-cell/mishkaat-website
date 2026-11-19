@@ -334,6 +334,147 @@ export function requireUser(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+interface ResolvedViewer {
+  viewer_type: 'member' | 'admin' | 'guest';
+  user_id: string | null;
+  viewer_name: string;
+  viewer_email: string | null;
+}
+
+function parseDeviceInfo(ua: string | undefined): string {
+  if (!ua || !ua.trim()) return 'Unknown Device';
+  const raw = ua;
+
+  let os = 'Desktop';
+  if (/android/i.test(raw)) os = 'Android';
+  else if (/iphone/i.test(raw)) os = 'iPhone';
+  else if (/ipad/i.test(raw)) os = 'iPad';
+  else if (/windows/i.test(raw)) os = 'Windows';
+  else if (/macintosh|mac os x/i.test(raw)) os = 'macOS';
+  else if (/linux/i.test(raw)) os = 'Linux';
+  else if (/bot|crawler|spider|slurp|googlebot|bingbot/i.test(raw)) os = 'Bot/Crawler';
+
+  let browser = 'Browser';
+  if (/instagram/i.test(raw)) browser = 'Instagram App';
+  else if (/fban|fbav/i.test(raw)) browser = 'Facebook App';
+  else if (/edg\//i.test(raw)) browser = 'Edge';
+  else if (/opr\/|opera/i.test(raw)) browser = 'Opera';
+  else if (/chrome|crios/i.test(raw)) browser = 'Chrome';
+  else if (/firefox|fxios/i.test(raw)) browser = 'Firefox';
+  else if (/safari/i.test(raw)) browser = 'Safari';
+
+  return `${os} · ${browser}`;
+}
+
+function extractClientIp(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  let ip = '';
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    ip = forwarded.split(',')[0].trim();
+  } else if (Array.isArray(forwarded) && forwarded.length > 0) {
+    ip = String(forwarded[0]).split(',')[0].trim();
+  } else {
+    ip = req.ip || req.socket.remoteAddress || 'unknown';
+  }
+  return ip.replace(/^::ffff:/, '') || 'unknown';
+}
+
+function resolveOptionalViewer(req: Request): ResolvedViewer {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const now = Date.now();
+
+    const userSession = db.prepare(`
+      SELECT s.user_id, u.full_name, u.email
+      FROM user_sessions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.token = ? AND s.expires_at > ?
+    `).get(token, now) as { user_id: string; full_name: string; email: string } | undefined;
+
+    if (userSession) {
+      return {
+        viewer_type: 'member',
+        user_id: userSession.user_id,
+        viewer_name: userSession.full_name,
+        viewer_email: userSession.email
+      };
+    }
+
+    const adminSession = db.prepare(`
+      SELECT s.admin_id, a.username, a.full_name
+      FROM admin_sessions s
+      JOIN admins a ON s.admin_id = a.id
+      WHERE s.token = ? AND s.expires_at > ?
+    `).get(token, now) as { admin_id: string; username: string; full_name: string } | undefined;
+
+    if (adminSession) {
+      return {
+        viewer_type: 'admin',
+        user_id: adminSession.admin_id,
+        viewer_name: `${adminSession.full_name} (Admin)`,
+        viewer_email: `${adminSession.username}@mishkaat.admin`
+      };
+    }
+  }
+
+  return {
+    viewer_type: 'guest',
+    user_id: null,
+    viewer_name: 'Guest Visitor',
+    viewer_email: null
+  };
+}
+
+function recordViewLog(
+  req: Request,
+  opts: {
+    targetType: 'website' | 'reel';
+    targetId?: string | null;
+    targetTitle?: string | null;
+    pagePath?: string | null;
+  },
+  preResolvedViewer?: ResolvedViewer
+) {
+  try {
+    const viewer = preResolvedViewer || resolveOptionalViewer(req);
+    const id = generateId('vl');
+    const createdAt = new Date().toISOString();
+    const deviceInfo = parseDeviceInfo(req.headers['user-agent']);
+    const ipAddress = extractClientIp(req);
+    const pagePath = opts.pagePath || '/';
+
+    db.prepare(`
+      INSERT INTO view_logs (
+        id, target_type, target_id, target_title,
+        user_id, viewer_name, viewer_email, viewer_type,
+        device_info, ip_address, page_path, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      opts.targetType,
+      opts.targetId ?? null,
+      opts.targetTitle ?? null,
+      viewer.user_id,
+      viewer.viewer_name,
+      viewer.viewer_email,
+      viewer.viewer_type,
+      deviceInfo,
+      ipAddress,
+      pagePath,
+      createdAt
+    );
+
+    const createdRow = db.prepare('SELECT * FROM view_logs WHERE id = ?').get(id) as Record<string, any> | undefined;
+    if (createdRow) {
+      syncRecordToTurso('view_logs', createdRow).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('View log warning:', err);
+  }
+}
+
 // -------------------------------------------------------------
 // AUTH & SETTINGS ROUTES
 // -------------------------------------------------------------
@@ -1120,17 +1261,44 @@ apiRouter.get('/stats', (_req, res) => {
   });
 });
 
-apiRouter.post('/stats/view', (_req, res) => {
+apiRouter.post('/stats/view', (req, res) => {
   try {
-    db.prepare(`
-      INSERT INTO website_settings (key, value)
-      VALUES ('site_views', '1')
-      ON CONFLICT(key) DO UPDATE SET value = CAST(COALESCE(CAST(value AS INTEGER), 0) + 1 AS TEXT)
-    `).run();
+    const { page_path, identifyOnly } = req.body || {};
+    const isIdentifyOnly = identifyOnly === true;
+
+    if (!isIdentifyOnly) {
+      db.prepare(`
+        INSERT INTO website_settings (key, value)
+        VALUES ('site_views', '1')
+        ON CONFLICT(key) DO UPDATE SET value = CAST(COALESCE(CAST(value AS INTEGER), 0) + 1 AS TEXT)
+      `).run();
+    }
 
     const row = db.prepare("SELECT value FROM website_settings WHERE key = 'site_views'").get() as { value: string } | undefined;
-    const websiteViews = Number(row?.value || 1);
-    syncRecordToTurso('website_settings', { key: 'site_views', value: String(websiteViews) }).catch(() => {});
+    const websiteViews = Number(row?.value || 0);
+
+    if (!isIdentifyOnly) {
+      syncRecordToTurso('website_settings', { key: 'site_views', value: String(websiteViews) }).catch(() => {});
+    }
+
+    const viewer = resolveOptionalViewer(req);
+    if (!isIdentifyOnly || viewer.viewer_type !== 'guest') {
+      const cleanPath =
+        typeof page_path === 'string' && page_path.trim()
+          ? page_path.trim().slice(0, 200)
+          : '/';
+      recordViewLog(
+        req,
+        {
+          targetType: 'website',
+          targetId: 'site',
+          targetTitle: 'MISHKAAT Website',
+          pagePath: cleanPath
+        },
+        viewer
+      );
+    }
+
     res.json({ websiteViews });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to track website view' });
@@ -1439,7 +1607,7 @@ apiRouter.get('/reels/:id', (req, res) => {
 
 apiRouter.post('/reels/:id/view', (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT id FROM reels WHERE id = ?').get(id) as { id: string } | undefined;
+  const existing = db.prepare('SELECT id, title FROM reels WHERE id = ?').get(id) as { id: string; title: string } | undefined;
   if (!existing) {
     res.status(404).json({ error: 'Reel not found' });
     return;
@@ -1448,6 +1616,13 @@ apiRouter.post('/reels/:id/view', (req, res) => {
   db.prepare('UPDATE reels SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?').run(id);
   const updated = db.prepare('SELECT * FROM reels WHERE id = ?').get(id) as Record<string, any>;
   syncRecordToTurso('reels', updated).catch(() => {});
+
+  recordViewLog(req, {
+    targetType: 'reel',
+    targetId: updated.id,
+    targetTitle: updated.title || existing.title || 'Islamic Reel',
+    pagePath: '/reels'
+  });
 
   res.json({
     id: updated.id,
@@ -2254,4 +2429,83 @@ apiRouter.delete('/contact-messages/:id', requireAdmin, (req: Request, res: Resp
     res.status(500).json({ error: err.message || 'Failed to delete message' });
   }
 });
+
+// -------------------------------------------------------------
+// ADMIN VIEWER ACTIVITY LOGS (WHO VIEWED WEBSITE & REELS)
+// -------------------------------------------------------------
+apiRouter.get('/admin/viewers', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const targetType = typeof req.query.target_type === 'string' ? req.query.target_type : '';
+    const targetId = typeof req.query.target_id === 'string' ? req.query.target_id : '';
+    const viewerType = typeof req.query.viewer_type === 'string' ? req.query.viewer_type : '';
+    const requestedLimit = Number(req.query.limit || 200);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(1, Math.floor(requestedLimit)), 500)
+      : 200;
+
+    let query = 'SELECT * FROM view_logs WHERE 1=1';
+    const params: any[] = [];
+
+    if (targetType === 'website' || targetType === 'reel') {
+      query += ' AND target_type = ?';
+      params.push(targetType);
+    }
+    if (targetId) {
+      query += ' AND target_id = ?';
+      params.push(targetId);
+    }
+    if (viewerType === 'member' || viewerType === 'admin' || viewerType === 'guest') {
+      query += ' AND viewer_type = ?';
+      params.push(viewerType);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    const logs = db.prepare(query).all(...params);
+
+    const agg = db.prepare(`
+      SELECT
+        COUNT(*) as totalLogs,
+        SUM(CASE WHEN viewer_type != 'guest' THEN 1 ELSE 0 END) as memberViews,
+        SUM(CASE WHEN viewer_type = 'guest' THEN 1 ELSE 0 END) as guestViews,
+        SUM(CASE WHEN target_type = 'website' THEN 1 ELSE 0 END) as websiteViewLogs,
+        SUM(CASE WHEN target_type = 'reel' THEN 1 ELSE 0 END) as reelViewLogs,
+        COUNT(DISTINCT CASE WHEN viewer_type != 'guest' AND user_id IS NOT NULL THEN user_id END) as uniqueMembers
+      FROM view_logs
+    `).get() as {
+      totalLogs: number;
+      memberViews: number | null;
+      guestViews: number | null;
+      websiteViewLogs: number | null;
+      reelViewLogs: number | null;
+      uniqueMembers: number | null;
+    };
+
+    res.json({
+      logs,
+      summary: {
+        totalLogs: Number(agg?.totalLogs || 0),
+        memberViews: Number(agg?.memberViews || 0),
+        guestViews: Number(agg?.guestViews || 0),
+        websiteViewLogs: Number(agg?.websiteViewLogs || 0),
+        reelViewLogs: Number(agg?.reelViewLogs || 0),
+        uniqueMembers: Number(agg?.uniqueMembers || 0)
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch viewer activity' });
+  }
+});
+
+apiRouter.delete('/admin/viewers', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    db.prepare('DELETE FROM view_logs').run();
+    syncDeleteWhereFromTurso('view_logs', '1=1', []).catch(() => {});
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to clear viewer logs' });
+  }
+});
+
 

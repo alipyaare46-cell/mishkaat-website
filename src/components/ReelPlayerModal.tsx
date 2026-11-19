@@ -26,6 +26,7 @@ import { useUserAuth } from '../context/UserAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
+import { InstagramVideoEmbed } from './InstagramVideoEmbed';
 import { extractYouTubeId, isInstagramUrl, getInstagramEmbedUrl } from '../utils/media';
 
 interface ReelPlayerModalProps {
@@ -73,6 +74,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   const [isLiking, setIsLiking] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFitMode, setIsFitMode] = useState(false); // Toggle between full bleed and complete uncropped fit
+  const [isInstagramZoom, setIsInstagramZoom] = useState(false); // Optional zoom for letterboxed Instagram reels
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -387,7 +389,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 relative">
-            {/* Fit / Crop Mode Toggle (only for native video) */}
+            {/* Fit / Crop Mode Toggle (native video) or Zoom toggle (Instagram) */}
             {!isYouTube && !isInstagram && (
               <button
                 type="button"
@@ -400,6 +402,20 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
                 title={isFitMode ? 'Fit View (No video cutoff)' : 'Full Fill (Cropped)'}
               >
                 {isFitMode ? 'Fit 📐' : 'Fill 🔲'}
+              </button>
+            )}
+            {isInstagram && (
+              <button
+                type="button"
+                onClick={() => setIsInstagramZoom(!isInstagramZoom)}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                  isInstagramZoom
+                    ? 'bg-[#064E3B] text-white border-emerald-500'
+                    : 'bg-black/50 hover:bg-black/70 text-stone-300 border-white/15'
+                }`}
+                title={isInstagramZoom ? 'Reset Zoom' : 'Zoom Video'}
+              >
+                {isInstagramZoom ? 'Fit' : 'Zoom +'}
               </button>
             )}
 
@@ -536,16 +552,11 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             />
           ) : isInstagram ? (
             instagramEmbedUrl ? (
-              <div className="w-full h-full bg-white flex items-center justify-center pt-10 pb-24">
-                <iframe
-                  key={currentReel.id}
-                  src={instagramEmbedUrl}
-                  title={currentReel.title || 'Instagram Reel'}
-                  className="w-full h-full border-0 bg-white"
-                  allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
+              <InstagramVideoEmbed
+                embedUrl={instagramEmbedUrl}
+                title={currentReel.title || 'Instagram Reel'}
+                zoomFill={isInstagramZoom}
+              />
             ) : (
               <div className="p-6 text-center space-y-3">
                 <Play className="w-10 h-10 text-[#D4AF37] mx-auto" />

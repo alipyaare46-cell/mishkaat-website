@@ -24,6 +24,7 @@ import { useUserAuth } from '../context/UserAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
+import { InstagramVideoEmbed } from './InstagramVideoEmbed';
 import {
   extractYouTubeId,
   resolveMediaThumbnail,
@@ -245,14 +246,12 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
               )}
             </div>
           ) : isInstagram ? (
-            <div className="w-full h-[380px] sm:h-[420px] relative bg-stone-950 flex flex-col items-center justify-center p-2">
+            <div className="w-full h-[380px] sm:h-[420px] relative bg-black flex flex-col items-center justify-center overflow-hidden">
               {instagramEmbedUrl ? (
-                <iframe
-                  src={instagramEmbedUrl}
+                <InstagramVideoEmbed
+                  embedUrl={instagramEmbedUrl}
                   title={speech.title || 'Instagram Video Player'}
-                  className="w-full max-w-md h-full border-0 rounded-lg bg-white"
-                  allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                  allowFullScreen
+                  className="max-w-md"
                 />
               ) : (
                 <div className="text-center p-6 space-y-3">

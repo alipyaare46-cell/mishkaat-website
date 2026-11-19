@@ -16,7 +16,8 @@ import {
   UserBookmark,
   CommentItem,
   InteractionsData,
-  ContactMessage
+  ContactMessage,
+  ViewersResponse
 } from '../types';
 
 
@@ -253,9 +254,10 @@ export const api = {
       body: JSON.stringify(settings)
     }),
   getStats: () => request<WebsiteStats>('/stats'),
-  incrementSiteView: () =>
-    request<{ websiteViews: number }>('/stats/view', {
-      method: 'POST'
+  incrementSiteView: (data?: { page_path?: string; identifyOnly?: boolean }) =>
+    userRequest<{ websiteViews: number }>('/stats/view', {
+      method: 'POST',
+      body: JSON.stringify(data || {})
     }),
 
   // Scholars
@@ -330,7 +332,7 @@ export const api = {
       method: 'DELETE'
     }),
   incrementReelView: (id: string) =>
-    request<{ id: string; views_count: number }>(`/reels/${id}/view`, {
+    userRequest<{ id: string; views_count: number }>(`/reels/${id}/view`, {
       method: 'POST'
     }),
 
@@ -541,6 +543,20 @@ export const api = {
     }),
   deleteContactMessage: (id: string) =>
     request<{ success: boolean }>(`/contact-messages/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Admin Viewer Analytics (Who Viewed Website & Reels)
+  getAdminViewers: (params: { target_type?: string; target_id?: string; viewer_type?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.target_type) q.append('target_type', params.target_type);
+    if (params.target_id) q.append('target_id', params.target_id);
+    if (params.viewer_type) q.append('viewer_type', params.viewer_type);
+    if (params.limit) q.append('limit', String(params.limit));
+    return request<ViewersResponse>(`/admin/viewers?${q.toString()}`);
+  },
+  clearAdminViewers: () =>
+    request<{ success: boolean }>('/admin/viewers', {
       method: 'DELETE'
     })
 };

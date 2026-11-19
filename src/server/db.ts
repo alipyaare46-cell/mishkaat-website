@@ -312,8 +312,28 @@ export function initDatabase() {
     );
   `);
 
+  // 21. Viewer Activity Logs (Who viewed website & reels)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS view_logs (
+      id TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      target_title TEXT,
+      user_id TEXT,
+      viewer_name TEXT,
+      viewer_email TEXT,
+      viewer_type TEXT NOT NULL,
+      device_info TEXT,
+      ip_address TEXT,
+      page_path TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
   // Create indexes for fast searching and relations
   db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_view_logs_created ON view_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_view_logs_target ON view_logs(target_type, target_id);
     CREATE INDEX IF NOT EXISTS idx_otp_email ON password_reset_otps(email);
     CREATE INDEX IF NOT EXISTS idx_contact_created ON contact_messages(created_at);
     CREATE INDEX IF NOT EXISTS idx_speeches_scholar ON speeches(scholar_id);

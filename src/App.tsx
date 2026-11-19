@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
-import { UserAuthProvider } from './context/UserAuthContext';
+import { UserAuthProvider, useUserAuth } from './context/UserAuthContext';
 import { api } from './services/api';
 import {
   Scholar,
@@ -52,6 +52,7 @@ function getRouteFromPath(): { route: string; param: string | null } {
 
 function MainApp() {
   const { admin, isLoading: authLoading } = useAuth();
+  const { user } = useUserAuth();
   
   // Navigation states initialized from the current browser URL
   const [currentRoute, setCurrentRoute] = useState<string>(
@@ -171,14 +172,38 @@ function MainApp() {
     if (currentRoute === 'admin') return;
     if (sessionStorage.getItem('mishkaat_site_viewed')) return;
     sessionStorage.setItem('mishkaat_site_viewed', '1');
-    api.incrementSiteView()
+    if (user?.id) {
+      sessionStorage.setItem('mishkaat_identified_uid', user.id);
+    }
+    api.incrementSiteView({ page_path: window.location.pathname || '/' })
       .then((res) => {
         setStats((prev) => (prev ? { ...prev, websiteViews: res.websiteViews } : prev));
       })
       .catch(() => {
         sessionStorage.removeItem('mishkaat_site_viewed');
       });
-  }, [currentRoute]);
+  }, [currentRoute, user?.id]);
+
+  // If a visitor signs in later during the same browser session, record their identified profile
+  useEffect(() => {
+    if (currentRoute === 'admin' || !user?.id) return;
+    if (sessionStorage.getItem('mishkaat_identified_uid') === user.id) return;
+    sessionStorage.setItem('mishkaat_identified_uid', user.id);
+    const alreadyCountedSiteView = Boolean(sessionStorage.getItem('mishkaat_site_viewed'));
+    if (!alreadyCountedSiteView) {
+      sessionStorage.setItem('mishkaat_site_viewed', '1');
+    }
+    api.incrementSiteView({
+      page_path: window.location.pathname || '/',
+      identifyOnly: alreadyCountedSiteView
+    })
+      .then((res) => {
+        setStats((prev) => (prev ? { ...prev, websiteViews: res.websiteViews } : prev));
+      })
+      .catch(() => {
+        sessionStorage.removeItem('mishkaat_identified_uid');
+      });
+  }, [currentRoute, user?.id]);
 
   const handleReelViewed = useCallback((reelId: string, viewsCount: number) => {
     setReels((prev) =>
