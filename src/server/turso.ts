@@ -55,8 +55,11 @@ export const SYNC_TABLES = [
   'website_settings',
   'admins',
   'users',
+  'user_bookmarks',
   'likes',
   'comments',
+  'shares',
+  'unique_views',
   'contact_messages',
   'view_logs'
 ];
@@ -157,6 +160,7 @@ async function ensureTursoSchema(client: Client) {
       duration TEXT,
       upload_date TEXT NOT NULL,
       tags TEXT,
+      views_count INTEGER DEFAULT 0,
       is_published INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -268,6 +272,13 @@ async function ensureTursoSchema(client: Client) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );`,
+    `CREATE TABLE IF NOT EXISTS user_bookmarks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
     `CREATE TABLE IF NOT EXISTS likes (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -282,6 +293,23 @@ async function ensureTursoSchema(client: Client) {
       item_type TEXT NOT NULL,
       item_id TEXT NOT NULL,
       content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS shares (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      visitor_key TEXT,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      platform TEXT DEFAULT 'link',
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS unique_views (
+      id TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      viewer_key TEXT NOT NULL,
+      user_id TEXT,
       created_at TEXT NOT NULL
     );`,
     `CREATE TABLE IF NOT EXISTS contact_messages (
@@ -314,9 +342,14 @@ async function ensureTursoSchema(client: Client) {
     await client.execute(sql);
   }
 
-  // Safe migration on existing Turso reels table
+  // Safe migrations on existing Turso tables
   try {
     await client.execute('ALTER TABLE reels ADD COLUMN views_count INTEGER DEFAULT 0');
+  } catch {
+    // Column already exists on Turso
+  }
+  try {
+    await client.execute('ALTER TABLE speeches ADD COLUMN views_count INTEGER DEFAULT 0');
   } catch {
     // Column already exists on Turso
   }

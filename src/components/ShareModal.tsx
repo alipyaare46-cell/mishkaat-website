@@ -7,6 +7,7 @@ interface ShareModalProps {
   title: string;
   url?: string;
   category?: string;
+  onShare?: (platform: string) => void;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -14,7 +15,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   onClose,
   title,
   url,
-  category = 'Islamic Content'
+  category = 'Islamic Content',
+  onShare
 }) => {
   const [copied, setCopied] = useState(false);
   const [instagramFeedback, setInstagramFeedback] = useState(false);
@@ -28,6 +30,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     try {
       await navigator.clipboard.writeText(`${shareText}`);
       setCopied(true);
+      onShare?.('copy');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback
@@ -35,11 +38,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const handleWhatsApp = () => {
+    onShare?.('whatsapp');
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleGmail = () => {
+    onShare?.('gmail');
     const emailSubject = `Mishkaat Platform: ${title}`;
     const emailBody = `Assalamu Alaikum,\n\nI wanted to share this authentic ${category} from Mishkaat Platform with you:\n\n"${title}"\n\nLink: ${shareUrl}\n\nPOWERED BY SYED ALI QALANDAR PEERZADE`;
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
@@ -47,11 +52,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const handleFacebook = () => {
+    onShare?.('facebook');
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareText)}`;
     window.open(fbUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleInstagram = async () => {
+    onShare?.('instagram');
     try {
       await navigator.clipboard.writeText(shareText);
       setInstagramFeedback(true);
@@ -71,6 +78,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           text: `"${title}" - Mishkaat Platform`,
           url: shareUrl
         });
+        onShare?.('native');
       } catch {
         // User cancelled or error
       }

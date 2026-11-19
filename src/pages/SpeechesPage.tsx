@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Volume2, Play, Search, Filter, Calendar, Clock, User, ArrowRight, Bookmark } from 'lucide-react';
+import { Volume2, Play, Search, Calendar, Clock, Eye, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { Speech, Scholar, SpeechType } from '../types';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -262,17 +262,29 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    <span>{speech.upload_date}</span>
-                  </span>
-                  {speech.duration && (
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{speech.duration}</span>
+                <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
+                  <div className="flex items-center gap-3 font-mono text-[10px] text-stone-500">
+                    <span className="inline-flex items-center gap-1" title="Views">
+                      <Eye className="w-3 h-3 text-[#064E3B]" />
+                      <span>{(speech.views_count ?? 0).toLocaleString()}</span>
                     </span>
-                  )}
+                    <span className="inline-flex items-center gap-1" title="Likes">
+                      <Heart className="w-3 h-3 text-rose-500" />
+                      <span>{(speech.likes_count ?? 0).toLocaleString()}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1" title="Comments">
+                      <MessageSquare className="w-3 h-3 text-emerald-700" />
+                      <span>{(speech.comments_count ?? 0).toLocaleString()}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1" title="Shares">
+                      <Share2 className="w-3 h-3 text-sky-600" />
+                      <span>{(speech.shares_count ?? 0).toLocaleString()}</span>
+                    </span>
+                  </div>
+                  <span className="flex items-center gap-1 shrink-0">
+                    <Clock className="w-3 h-3" />
+                    <span>{speech.duration || speech.upload_date}</span>
+                  </span>
                 </div>
               </div>
             </div>

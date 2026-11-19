@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as LinkIcon, FileVideo, CheckCircle2, Eye } from 'lucide-react';
+import { Film, Plus, Edit2, Trash2, Check, X, Upload, Play, AlertCircle, Link as LinkIcon, FileVideo, CheckCircle2, Eye, Heart, MessageSquare, Share2, Bookmark } from 'lucide-react';
 import { Reel, Scholar, ViewLogItem } from '../../types';
 import { api } from '../../services/api';
 import { ConfirmDeleteModal } from '../../components/ConfirmDeleteModal';
@@ -273,6 +273,7 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                 <th className="py-3 px-4">Scholar</th>
                 <th className="py-3 px-4">Duration</th>
                 <th className="py-3 px-4">Views</th>
+                <th className="py-3 px-4">Engagement</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -299,6 +300,26 @@ export const AdminReels: React.FC<AdminReelsProps> = ({
                       <Eye className="w-3.5 h-3.5 text-[#064E3B]" />
                       <span>{(r.views_count ?? 0).toLocaleString()}</span>
                     </button>
+                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2.5 text-[11px] font-mono text-stone-600 tabular-nums">
+                      <span className="inline-flex items-center gap-1" title="Likes">
+                        <Heart className="w-3 h-3 text-rose-500" />
+                        <span>{(r.likes_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Comments">
+                        <MessageSquare className="w-3 h-3 text-emerald-700" />
+                        <span>{(r.comments_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Shares">
+                        <Share2 className="w-3 h-3 text-sky-600" />
+                        <span>{(r.shares_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Saves">
+                        <Bookmark className="w-3 h-3 text-amber-600" />
+                        <span>{(r.saves_count ?? 0).toLocaleString()}</span>
+                      </span>
+                    </div>
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap">
                     <button

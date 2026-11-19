@@ -428,24 +428,127 @@ function resolveOptionalViewer(req: Request): ResolvedViewer {
   };
 }
 
+function resolveViewerDedupeKey(req: Request, viewer: ResolvedViewer): string {
+  if (viewer.user_id) {
+    return `user:${viewer.user_id}`;
+  }
+  const rawVid =
+    (typeof req.headers['x-visitor-id'] === 'string' && req.headers['x-visitor-id']) ||
+    (typeof req.body?.visitor_id === 'string' && req.body.visitor_id) ||
+    '';
+  const cleanVid = rawVid.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+  if (cleanVid.length >= 8) {
+    return `visitor:${cleanVid}`;
+  }
+  const ip = extractClientIp(req);
+  const ua = String(req.headers['user-agent'] || '');
+  const hash = crypto.createHash('sha256').update(`${ip}|${ua}`).digest('hex').slice(0, 24);
+  return `guest:${hash}`;
+}
+
+function hasAlreadyViewed(
+  targetType: 'website' | 'reel' | 'speech',
+  targetId: string,
+  viewerKey: string,
+  userId: string | null
+): boolean {
+  if (userId) {
+    const row = db
+      .prepare(
+        'SELECT id FROM unique_views WHERE target_type = ? AND target_id = ? AND (viewer_key = ? OR user_id = ?) LIMIT 1'
+      )
+      .get(targetType, targetId, viewerKey, userId);
+    return Boolean(row);
+  }
+  const row = db
+    .prepare('SELECT id FROM unique_views WHERE target_type = ? AND target_id = ? AND viewer_key = ? LIMIT 1')
+    .get(targetType, targetId, viewerKey);
+  return Boolean(row);
+}
+
+function markUniqueView(
+  targetType: 'website' | 'reel' | 'speech',
+  targetId: string,
+  viewerKey: string,
+  userId: string | null
+): boolean {
+  try {
+    const id = generateId('uv');
+    const createdAt = new Date().toISOString();
+    const info = db
+      .prepare(
+        `INSERT OR IGNORE INTO unique_views (id, target_type, target_id, viewer_key, user_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, targetType, targetId, viewerKey, userId ?? null, createdAt);
+    if (info.changes > 0) {
+      syncRecordToTurso('unique_views', {
+        id,
+        target_type: targetType,
+        target_id: targetId,
+        viewer_key: viewerKey,
+        user_id: userId ?? null,
+        created_at: createdAt
+      }).catch(() => {});
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function recordViewLog(
   req: Request,
   opts: {
-    targetType: 'website' | 'reel';
+    targetType: 'website' | 'reel' | 'speech';
     targetId?: string | null;
     targetTitle?: string | null;
     pagePath?: string | null;
+    updateExistingOnly?: boolean;
   },
   preResolvedViewer?: ResolvedViewer
 ) {
   try {
     const viewer = preResolvedViewer || resolveOptionalViewer(req);
-    const id = generateId('vl');
     const createdAt = new Date().toISOString();
     const deviceInfo = parseDeviceInfo(req.headers['user-agent']);
     const ipAddress = extractClientIp(req);
     const pagePath = opts.pagePath || '/';
 
+    if (opts.updateExistingOnly) {
+      let existingLog: { id: string } | undefined;
+      if (viewer.user_id) {
+        existingLog = db
+          .prepare(
+            'SELECT id FROM view_logs WHERE target_type = ? AND COALESCE(target_id, \'\') = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1'
+          )
+          .get(opts.targetType, opts.targetId ?? '', viewer.user_id) as { id: string } | undefined;
+      } else {
+        existingLog = db
+          .prepare(
+            'SELECT id FROM view_logs WHERE target_type = ? AND COALESCE(target_id, \'\') = ? AND user_id IS NULL AND ip_address = ? AND device_info = ? ORDER BY created_at DESC LIMIT 1'
+          )
+          .get(opts.targetType, opts.targetId ?? '', ipAddress, deviceInfo) as { id: string } | undefined;
+      }
+
+      if (existingLog) {
+        db.prepare('UPDATE view_logs SET created_at = ?, page_path = ? WHERE id = ?').run(
+          createdAt,
+          pagePath,
+          existingLog.id
+        );
+        const updatedRow = db.prepare('SELECT * FROM view_logs WHERE id = ?').get(existingLog.id) as
+          | Record<string, any>
+          | undefined;
+        if (updatedRow) {
+          syncRecordToTurso('view_logs', updatedRow).catch(() => {});
+        }
+        return;
+      }
+    }
+
+    const id = generateId('vl');
     db.prepare(`
       INSERT INTO view_logs (
         id, target_type, target_id, target_title,
@@ -940,42 +1043,70 @@ apiRouter.post('/user/bookmarks/toggle', requireUser, (req, res) => {
   const existing = db.prepare('SELECT id FROM user_bookmarks WHERE user_id = ? AND item_type = ? AND item_id = ?')
     .get(sessionUser.user_id, item_type, item_id) as { id: string } | undefined;
 
+  let bookmarked = false;
+  let message = '';
   if (existing) {
     db.prepare('DELETE FROM user_bookmarks WHERE id = ?').run(existing.id);
     syncDeleteFromTurso('user_bookmarks', existing.id);
-    res.json({ bookmarked: false, message: 'Removed from your saved collection' });
+    bookmarked = false;
+    message = 'Removed from your saved collection';
   } else {
     const id = generateId('bmk');
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO user_bookmarks (id, user_id, item_type, item_id, created_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `).run(id, sessionUser.user_id, item_type, item_id);
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, sessionUser.user_id, item_type, item_id, now);
     syncRecordToTurso('user_bookmarks', { id, user_id: sessionUser.user_id, item_type, item_id, created_at: now });
-    res.json({ bookmarked: true, message: 'Saved to your spiritual collection!' });
+    bookmarked = true;
+    message = 'Saved to your spiritual collection!';
   }
+
+  const savesRow = db
+    .prepare('SELECT count(*) as c FROM user_bookmarks WHERE item_type = ? AND item_id = ?')
+    .get(item_type, item_id) as { c: number } | undefined;
+
+  res.json({
+    bookmarked,
+    message,
+    saves_count: savesRow ? Number(savesRow.c) : 0
+  });
 });
 
 // -------------------------------------------------------------
-// LIKES & COMMENTS (INTERACTIONS FOR VIDEOS & REELS)
+// LIKES, SHARES, SAVES & COMMENTS (INTERACTIONS FOR VIDEOS & REELS)
 // -------------------------------------------------------------
 
 apiRouter.get('/interactions/:item_type/:item_id', (req, res) => {
   const { item_type, item_id } = req.params;
 
-  // Like count
+  // Like, Share, Save counts (visible across all accounts & guests)
   const likeRow = db.prepare('SELECT count(*) as c FROM likes WHERE item_type = ? AND item_id = ?').get(item_type, item_id) as { c: number };
-  
-  // Check if current user liked
+  const shareRow = db.prepare('SELECT count(*) as c FROM shares WHERE item_type = ? AND item_id = ?').get(item_type, item_id) as { c: number };
+  const saveRow = db.prepare('SELECT count(*) as c FROM user_bookmarks WHERE item_type = ? AND item_id = ?').get(item_type, item_id) as { c: number };
+
+  let viewsCount = 0;
+  if (item_type === 'reel') {
+    const r = db.prepare('SELECT COALESCE(views_count, 0) as v FROM reels WHERE id = ?').get(item_id) as { v: number } | undefined;
+    viewsCount = r ? Number(r.v) : 0;
+  } else if (item_type === 'speech') {
+    const s = db.prepare('SELECT COALESCE(views_count, 0) as v FROM speeches WHERE id = ?').get(item_id) as { v: number } | undefined;
+    viewsCount = s ? Number(s.v) : 0;
+  }
+
+  // Check if current signed-in user (member or admin) liked/saved
+  const viewer = resolveOptionalViewer(req);
   let hasLiked = false;
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    const session = db.prepare('SELECT user_id FROM user_sessions WHERE token = ? AND expires_at > ?').get(token, Date.now()) as { user_id: string } | undefined;
-    if (session) {
-      const userLike = db.prepare('SELECT id FROM likes WHERE user_id = ? AND item_type = ? AND item_id = ?').get(session.user_id, item_type, item_id);
-      hasLiked = !!userLike;
-    }
+  let hasSaved = false;
+  if (viewer.user_id) {
+    const userLike = db
+      .prepare('SELECT id FROM likes WHERE user_id = ? AND item_type = ? AND item_id = ?')
+      .get(viewer.user_id, item_type, item_id);
+    hasLiked = !!userLike;
+    const userSave = db
+      .prepare('SELECT id FROM user_bookmarks WHERE user_id = ? AND item_type = ? AND item_id = ?')
+      .get(viewer.user_id, item_type, item_id);
+    hasSaved = !!userSave;
   }
 
   // Comments list
@@ -987,8 +1118,13 @@ apiRouter.get('/interactions/:item_type/:item_id', (req, res) => {
   `).all(item_type, item_id);
 
   res.json({
-    likes_count: likeRow ? likeRow.c : 0,
+    likes_count: likeRow ? Number(likeRow.c) : 0,
     has_liked: hasLiked,
+    shares_count: shareRow ? Number(shareRow.c) : 0,
+    saves_count: saveRow ? Number(saveRow.c) : 0,
+    has_saved: hasSaved,
+    views_count: viewsCount,
+    comments_count: comments.length,
     comments
   });
 });
@@ -1012,8 +1148,8 @@ apiRouter.post('/interactions/like', requireUser, (req, res) => {
   } else {
     const id = generateId('lk');
     const now = new Date().toISOString();
-    db.prepare('INSERT INTO likes (id, user_id, item_type, item_id, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
-      .run(id, sessionUser.user_id, item_type, item_id);
+    db.prepare('INSERT INTO likes (id, user_id, item_type, item_id, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(id, sessionUser.user_id, item_type, item_id, now);
     syncRecordToTurso('likes', { id, user_id: sessionUser.user_id, item_type, item_id, created_at: now });
     liked = true;
   }
@@ -1022,7 +1158,60 @@ apiRouter.post('/interactions/like', requireUser, (req, res) => {
 
   res.json({
     liked,
-    likes_count: likeCount ? likeCount.c : 0
+    likes_count: likeCount ? Number(likeCount.c) : 0
+  });
+});
+
+apiRouter.post('/interactions/share', (req, res) => {
+  const { item_type, item_id, platform } = req.body || {};
+  if (!item_type || !item_id) {
+    res.status(400).json({ error: 'item_type and item_id are required' });
+    return;
+  }
+
+  const cleanType = String(item_type).trim().slice(0, 40);
+  const cleanId = String(item_id).trim().slice(0, 120);
+  const cleanPlatform = (typeof platform === 'string' && platform.trim() ? platform.trim() : 'link').slice(0, 40);
+
+  const viewer = resolveOptionalViewer(req);
+  const viewerKey = resolveViewerDedupeKey(req, viewer);
+
+  // Guard against accidental rapid double-clicks within 10s on same item/platform/viewer
+  const tenSecAgo = new Date(Date.now() - 10_000).toISOString();
+  const recentDuplicate = db
+    .prepare(
+      `SELECT id FROM shares
+       WHERE item_type = ? AND item_id = ? AND platform = ? AND COALESCE(user_id, visitor_key) = ? AND created_at >= ?
+       LIMIT 1`
+    )
+    .get(cleanType, cleanId, cleanPlatform, viewer.user_id || viewerKey, tenSecAgo);
+
+  if (!recentDuplicate) {
+    const id = generateId('shr');
+    const createdAt = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO shares (id, user_id, visitor_key, item_type, item_id, platform, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, viewer.user_id ?? null, viewerKey, cleanType, cleanId, cleanPlatform, createdAt);
+
+    syncRecordToTurso('shares', {
+      id,
+      user_id: viewer.user_id ?? null,
+      visitor_key: viewerKey,
+      item_type: cleanType,
+      item_id: cleanId,
+      platform: cleanPlatform,
+      created_at: createdAt
+    }).catch(() => {});
+  }
+
+  const shareCount = db
+    .prepare('SELECT count(*) as c FROM shares WHERE item_type = ? AND item_id = ?')
+    .get(cleanType, cleanId) as { c: number } | undefined;
+
+  res.json({
+    shared: true,
+    shares_count: shareCount ? Number(shareCount.c) : 0
   });
 });
 
@@ -1414,6 +1603,12 @@ apiRouter.get('/stats', (_req, res) => {
   const websiteViews = Number(siteViewsRow?.value || 0);
   const reelViewsRow = db.prepare('SELECT COALESCE(SUM(COALESCE(views_count, 0)), 0) as totalViews FROM reels').get() as { totalViews: number };
   const totalReelViews = Number(reelViewsRow?.totalViews || 0);
+  const speechViewsRow = db.prepare('SELECT COALESCE(SUM(COALESCE(views_count, 0)), 0) as totalViews FROM speeches').get() as { totalViews: number };
+  const totalSpeechViews = Number(speechViewsRow?.totalViews || 0);
+  const likesRow = db.prepare('SELECT count(*) as c FROM likes').get() as { c: number };
+  const sharesRow = db.prepare('SELECT count(*) as c FROM shares').get() as { c: number };
+  const commentsRow = db.prepare('SELECT count(*) as c FROM comments').get() as { c: number };
+  const savesRow = db.prepare('SELECT count(*) as c FROM user_bookmarks').get() as { c: number };
 
   res.json({
     published: {
@@ -1435,7 +1630,12 @@ apiRouter.get('/stats', (_req, res) => {
       scholars: totalScholars.c
     },
     websiteViews,
-    totalReelViews
+    totalReelViews,
+    totalSpeechViews,
+    totalLikes: Number(likesRow?.c || 0),
+    totalShares: Number(sharesRow?.c || 0),
+    totalComments: Number(commentsRow?.c || 0),
+    totalSaves: Number(savesRow?.c || 0)
   });
 });
 
@@ -1443,41 +1643,76 @@ apiRouter.post('/stats/view', (req, res) => {
   try {
     const { page_path, identifyOnly } = req.body || {};
     const isIdentifyOnly = identifyOnly === true;
+    const viewer = resolveOptionalViewer(req);
+    const viewerKey = resolveViewerDedupeKey(req, viewer);
+    const cleanPath =
+      typeof page_path === 'string' && page_path.trim()
+        ? page_path.trim().slice(0, 200)
+        : '/';
 
-    if (!isIdentifyOnly) {
-      db.prepare(`
-        INSERT INTO website_settings (key, value)
-        VALUES ('site_views', '1')
-        ON CONFLICT(key) DO UPDATE SET value = CAST(COALESCE(CAST(value AS INTEGER), 0) + 1 AS TEXT)
-      `).run();
+    let counted = false;
+
+    if (isIdentifyOnly) {
+      // Mid-session login: register the user ID in unique_views without double-counting
+      if (viewer.user_id) {
+        markUniqueView('website', 'site', viewerKey, viewer.user_id);
+        recordViewLog(
+          req,
+          {
+            targetType: 'website',
+            targetId: 'site',
+            targetTitle: 'MISHKAAT Website',
+            pagePath: cleanPath
+          },
+          viewer
+        );
+      }
+    } else {
+      const alreadyViewed = hasAlreadyViewed('website', 'site', viewerKey, viewer.user_id);
+      if (!alreadyViewed) {
+        const inserted = markUniqueView('website', 'site', viewerKey, viewer.user_id);
+        if (inserted) {
+          db.prepare(`
+            INSERT INTO website_settings (key, value)
+            VALUES ('site_views', '1')
+            ON CONFLICT(key) DO UPDATE SET value = CAST(COALESCE(CAST(value AS INTEGER), 0) + 1 AS TEXT)
+          `).run();
+          counted = true;
+        }
+        recordViewLog(
+          req,
+          {
+            targetType: 'website',
+            targetId: 'site',
+            targetTitle: 'MISHKAAT Website',
+            pagePath: cleanPath
+          },
+          viewer
+        );
+      } else {
+        // Refresh last visit timestamp without inflating unique view counts or duplicating log rows
+        recordViewLog(
+          req,
+          {
+            targetType: 'website',
+            targetId: 'site',
+            targetTitle: 'MISHKAAT Website',
+            pagePath: cleanPath,
+            updateExistingOnly: true
+          },
+          viewer
+        );
+      }
     }
 
     const row = db.prepare("SELECT value FROM website_settings WHERE key = 'site_views'").get() as { value: string } | undefined;
     const websiteViews = Number(row?.value || 0);
 
-    if (!isIdentifyOnly) {
+    if (counted) {
       syncRecordToTurso('website_settings', { key: 'site_views', value: String(websiteViews) }).catch(() => {});
     }
 
-    const viewer = resolveOptionalViewer(req);
-    if (!isIdentifyOnly || viewer.viewer_type !== 'guest') {
-      const cleanPath =
-        typeof page_path === 'string' && page_path.trim()
-          ? page_path.trim().slice(0, 200)
-          : '/';
-      recordViewLog(
-        req,
-        {
-          targetType: 'website',
-          targetId: 'site',
-          targetTitle: 'MISHKAAT Website',
-          pagePath: cleanPath
-        },
-        viewer
-      );
-    }
-
-    res.json({ websiteViews });
+    res.json({ websiteViews, counted });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to track website view' });
   }
@@ -1519,16 +1754,26 @@ apiRouter.get('/scholars/:slugOrId', (req, res) => {
 
   // Fetch only speeches strictly belonging to this scholar
   const speeches = db.prepare(`
-    SELECT * FROM speeches
-    WHERE scholar_id = ? AND is_published = 1
-    ORDER BY upload_date DESC
+    SELECT sp.*,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'speech' AND l.item_id = sp.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'speech' AND c.item_id = sp.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'speech' AND sh.item_id = sp.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'speech' AND ub.item_id = sp.id) as saves_count
+    FROM speeches sp
+    WHERE sp.scholar_id = ? AND sp.is_published = 1
+    ORDER BY sp.upload_date DESC
   `).all(scholar.id);
 
   // Fetch only reels strictly belonging to this scholar
   const reels = db.prepare(`
-    SELECT * FROM reels
-    WHERE scholar_id = ? AND is_published = 1
-    ORDER BY created_at DESC
+    SELECT r.*,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'reel' AND l.item_id = r.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'reel' AND c.item_id = r.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'reel' AND sh.item_id = r.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'reel' AND ub.item_id = r.id) as saves_count
+    FROM reels r
+    WHERE r.scholar_id = ? AND r.is_published = 1
+    ORDER BY r.created_at DESC
   `).all(scholar.id);
 
   res.json({
@@ -1611,7 +1856,14 @@ apiRouter.get('/speeches', (req, res) => {
   const search = req.query.search ? `%${req.query.search}%` : null;
 
   let query = `
-    SELECT sp.*, COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name, COALESCE(sc.honorific_title, '') as scholar_title, COALESCE(sc.slug, '') as scholar_slug
+    SELECT sp.*,
+      COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name,
+      COALESCE(sc.honorific_title, '') as scholar_title,
+      COALESCE(sc.slug, '') as scholar_slug,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'speech' AND l.item_id = sp.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'speech' AND c.item_id = sp.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'speech' AND sh.item_id = sp.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'speech' AND ub.item_id = sp.id) as saves_count
     FROM speeches sp
     LEFT JOIN scholars sc ON sp.scholar_id = sc.id
     WHERE 1=1
@@ -1641,7 +1893,15 @@ apiRouter.get('/speeches', (req, res) => {
 
 apiRouter.get('/speeches/:id', (req, res) => {
   const speech = db.prepare(`
-    SELECT sp.*, COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name, COALESCE(sc.honorific_title, '') as scholar_title, COALESCE(sc.slug, '') as scholar_slug, sc.profile_image as scholar_image
+    SELECT sp.*,
+      COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name,
+      COALESCE(sc.honorific_title, '') as scholar_title,
+      COALESCE(sc.slug, '') as scholar_slug,
+      sc.profile_image as scholar_image,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'speech' AND l.item_id = sp.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'speech' AND c.item_id = sp.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'speech' AND sh.item_id = sp.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'speech' AND ub.item_id = sp.id) as saves_count
     FROM speeches sp
     LEFT JOIN scholars sc ON sp.scholar_id = sc.id
     WHERE sp.id = ?
@@ -1652,6 +1912,62 @@ apiRouter.get('/speeches/:id', (req, res) => {
     return;
   }
   res.json(speech);
+});
+
+apiRouter.post('/speeches/:id/view', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id, title, views_count FROM speeches WHERE id = ?').get(id) as
+    | { id: string; title: string; views_count?: number }
+    | undefined;
+  if (!existing) {
+    res.status(404).json({ error: 'Speech not found' });
+    return;
+  }
+
+  const viewer = resolveOptionalViewer(req);
+  const viewerKey = resolveViewerDedupeKey(req, viewer);
+  let counted = false;
+
+  if (!hasAlreadyViewed('speech', id, viewerKey, viewer.user_id)) {
+    const inserted = markUniqueView('speech', id, viewerKey, viewer.user_id);
+    if (inserted) {
+      db.prepare('UPDATE speeches SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?').run(id);
+      counted = true;
+    }
+    recordViewLog(
+      req,
+      {
+        targetType: 'speech',
+        targetId: existing.id,
+        targetTitle: existing.title || 'Islamic Speech',
+        pagePath: '/speeches'
+      },
+      viewer
+    );
+  } else {
+    recordViewLog(
+      req,
+      {
+        targetType: 'speech',
+        targetId: existing.id,
+        targetTitle: existing.title || 'Islamic Speech',
+        pagePath: '/speeches',
+        updateExistingOnly: true
+      },
+      viewer
+    );
+  }
+
+  const updated = db.prepare('SELECT * FROM speeches WHERE id = ?').get(id) as Record<string, any>;
+  if (counted && updated) {
+    syncRecordToTurso('speeches', updated).catch(() => {});
+  }
+
+  res.json({
+    id: updated.id,
+    views_count: Number(updated.views_count || 0),
+    counted
+  });
 });
 
 apiRouter.post('/speeches', requireAdmin, (req, res) => {
@@ -1724,11 +2040,15 @@ apiRouter.delete('/speeches/:id', requireAdmin, (req, res) => {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'speech' AND item_id = ?").run(id);
     db.prepare("DELETE FROM likes WHERE item_type = 'speech' AND item_id = ?").run(id);
     db.prepare("DELETE FROM comments WHERE item_type = 'speech' AND item_id = ?").run(id);
+    db.prepare("DELETE FROM shares WHERE item_type = 'speech' AND item_id = ?").run(id);
+    db.prepare("DELETE FROM unique_views WHERE target_type = 'speech' AND target_id = ?").run(id);
     db.prepare('DELETE FROM speeches WHERE id = ?').run(id);
     syncDeleteFromTurso('speeches', id);
     syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'speech' AND item_id = ?", [id]);
     syncDeleteWhereFromTurso('likes', "item_type = 'speech' AND item_id = ?", [id]);
     syncDeleteWhereFromTurso('comments', "item_type = 'speech' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('shares', "item_type = 'speech' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('unique_views', "target_type = 'speech' AND target_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete speech' });
@@ -1744,7 +2064,15 @@ apiRouter.get('/reels', (req, res) => {
   const search = req.query.search ? `%${req.query.search}%` : null;
 
   let query = `
-    SELECT r.*, COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name, COALESCE(sc.honorific_title, '') as scholar_title, COALESCE(sc.slug, '') as scholar_slug, sc.profile_image as scholar_image
+    SELECT r.*,
+      COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name,
+      COALESCE(sc.honorific_title, '') as scholar_title,
+      COALESCE(sc.slug, '') as scholar_slug,
+      sc.profile_image as scholar_image,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'reel' AND l.item_id = r.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'reel' AND c.item_id = r.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'reel' AND sh.item_id = r.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'reel' AND ub.item_id = r.id) as saves_count
     FROM reels r
     LEFT JOIN scholars sc ON r.scholar_id = sc.id
     WHERE 1=1
@@ -1770,7 +2098,15 @@ apiRouter.get('/reels', (req, res) => {
 
 apiRouter.get('/reels/:id', (req, res) => {
   const reel = db.prepare(`
-    SELECT r.*, COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name, COALESCE(sc.honorific_title, '') as scholar_title, COALESCE(sc.slug, '') as scholar_slug, sc.profile_image as scholar_image
+    SELECT r.*,
+      COALESCE(sc.full_name, 'Hazrat Allama') as scholar_name,
+      COALESCE(sc.honorific_title, '') as scholar_title,
+      COALESCE(sc.slug, '') as scholar_slug,
+      sc.profile_image as scholar_image,
+      (SELECT count(*) FROM likes l WHERE l.item_type = 'reel' AND l.item_id = r.id) as likes_count,
+      (SELECT count(*) FROM comments c WHERE c.item_type = 'reel' AND c.item_id = r.id) as comments_count,
+      (SELECT count(*) FROM shares sh WHERE sh.item_type = 'reel' AND sh.item_id = r.id) as shares_count,
+      (SELECT count(*) FROM user_bookmarks ub WHERE ub.item_type = 'reel' AND ub.item_id = r.id) as saves_count
     FROM reels r
     LEFT JOIN scholars sc ON r.scholar_id = sc.id
     WHERE r.id = ?
@@ -1785,26 +2121,55 @@ apiRouter.get('/reels/:id', (req, res) => {
 
 apiRouter.post('/reels/:id/view', (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT id, title FROM reels WHERE id = ?').get(id) as { id: string; title: string } | undefined;
+  const existing = db.prepare('SELECT id, title, views_count FROM reels WHERE id = ?').get(id) as { id: string; title: string; views_count?: number } | undefined;
   if (!existing) {
     res.status(404).json({ error: 'Reel not found' });
     return;
   }
 
-  db.prepare('UPDATE reels SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?').run(id);
-  const updated = db.prepare('SELECT * FROM reels WHERE id = ?').get(id) as Record<string, any>;
-  syncRecordToTurso('reels', updated).catch(() => {});
+  const viewer = resolveOptionalViewer(req);
+  const viewerKey = resolveViewerDedupeKey(req, viewer);
+  let counted = false;
 
-  recordViewLog(req, {
-    targetType: 'reel',
-    targetId: updated.id,
-    targetTitle: updated.title || existing.title || 'Islamic Reel',
-    pagePath: '/reels'
-  });
+  if (!hasAlreadyViewed('reel', id, viewerKey, viewer.user_id)) {
+    const inserted = markUniqueView('reel', id, viewerKey, viewer.user_id);
+    if (inserted) {
+      db.prepare('UPDATE reels SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?').run(id);
+      counted = true;
+    }
+    recordViewLog(
+      req,
+      {
+        targetType: 'reel',
+        targetId: existing.id,
+        targetTitle: existing.title || 'Islamic Reel',
+        pagePath: '/reels'
+      },
+      viewer
+    );
+  } else {
+    recordViewLog(
+      req,
+      {
+        targetType: 'reel',
+        targetId: existing.id,
+        targetTitle: existing.title || 'Islamic Reel',
+        pagePath: '/reels',
+        updateExistingOnly: true
+      },
+      viewer
+    );
+  }
+
+  const updated = db.prepare('SELECT * FROM reels WHERE id = ?').get(id) as Record<string, any>;
+  if (counted && updated) {
+    syncRecordToTurso('reels', updated).catch(() => {});
+  }
 
   res.json({
     id: updated.id,
-    views_count: Number(updated.views_count || 0)
+    views_count: Number(updated.views_count || 0),
+    counted
   });
 });
 
@@ -1877,11 +2242,15 @@ apiRouter.delete('/reels/:id', requireAdmin, (req, res) => {
     db.prepare("DELETE FROM user_bookmarks WHERE item_type = 'reel' AND item_id = ?").run(id);
     db.prepare("DELETE FROM likes WHERE item_type = 'reel' AND item_id = ?").run(id);
     db.prepare("DELETE FROM comments WHERE item_type = 'reel' AND item_id = ?").run(id);
+    db.prepare("DELETE FROM shares WHERE item_type = 'reel' AND item_id = ?").run(id);
+    db.prepare("DELETE FROM unique_views WHERE target_type = 'reel' AND target_id = ?").run(id);
     db.prepare('DELETE FROM reels WHERE id = ?').run(id);
     syncDeleteFromTurso('reels', id);
     syncDeleteWhereFromTurso('user_bookmarks', "item_type = 'reel' AND item_id = ?", [id]);
     syncDeleteWhereFromTurso('likes', "item_type = 'reel' AND item_id = ?", [id]);
     syncDeleteWhereFromTurso('comments', "item_type = 'reel' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('shares', "item_type = 'reel' AND item_id = ?", [id]);
+    syncDeleteWhereFromTurso('unique_views', "target_type = 'reel' AND target_id = ?", [id]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to delete reel' });

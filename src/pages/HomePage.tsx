@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, ArrowRight, Play, ExternalLink, Calendar, Clock, Bookmark, Eye } from 'lucide-react';
+import { Volume2, Film, BookOpen, FileText, Quote, Feather, Users, ArrowRight, Play, ExternalLink, Calendar, Clock, Bookmark, Eye, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { Scholar, Speech, Reel, Book, Article, Aqwaal, Shayariyan, WebsiteSettings, WebsiteStats } from '../types';
 import madinahHeroImg from '../assets/images/madinah_munawwarah_hero_1793189667524.jpg';
 import { useLanguage } from '../context/LanguageContext';
@@ -343,17 +343,29 @@ export const HomePage: React.FC<HomePageProps> = ({
                         </p>
                       </div>
 
-                    <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>{speech.upload_date}</span>
-                      </span>
-                      {speech.duration && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{speech.duration}</span>
+                    <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
+                      <div className="flex items-center gap-3 font-mono text-[10px] text-stone-500">
+                        <span className="inline-flex items-center gap-1" title="Views">
+                          <Eye className="w-3 h-3 text-[#064E3B]" />
+                          <span>{(speech.views_count ?? 0).toLocaleString()}</span>
                         </span>
-                      )}
+                        <span className="inline-flex items-center gap-1" title="Likes">
+                          <Heart className="w-3 h-3 text-rose-500" />
+                          <span>{(speech.likes_count ?? 0).toLocaleString()}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1" title="Comments">
+                          <MessageSquare className="w-3 h-3 text-emerald-700" />
+                          <span>{(speech.comments_count ?? 0).toLocaleString()}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1" title="Shares">
+                          <Share2 className="w-3 h-3 text-sky-600" />
+                          <span>{(speech.shares_count ?? 0).toLocaleString()}</span>
+                        </span>
+                      </div>
+                      <span className="flex items-center gap-1 shrink-0">
+                        <Calendar className="w-3 h-3" />
+                        <span>{speech.duration || speech.upload_date}</span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -448,9 +460,23 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight">
                           {reel.title}
                         </h4>
-                        <div className="flex items-center gap-1 text-[10px] text-stone-300 font-mono pt-0.5">
-                          <Eye className="w-3 h-3 text-[#D4AF37]" />
-                          <span>{(reel.views_count ?? 0).toLocaleString()} views</span>
+                        <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-stone-200 font-mono pt-1">
+                          <span className="inline-flex items-center gap-1" title="Views">
+                            <Eye className="w-3 h-3 text-[#D4AF37]" />
+                            <span>{(reel.views_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Likes">
+                            <Heart className="w-3 h-3 text-rose-400" />
+                            <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Comments">
+                            <MessageSquare className="w-3 h-3 text-emerald-300" />
+                            <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Shares">
+                            <Share2 className="w-3 h-3 text-sky-300" />
+                            <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
+                          </span>
                         </div>
                       </div>
                     </div>

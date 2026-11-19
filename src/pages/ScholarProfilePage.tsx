@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock, Eye } from 'lucide-react';
+import { Users, Volume2, Film, Play, MapPin, ArrowLeft, Calendar, Clock, Eye, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { Scholar, Speech, Reel } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
@@ -232,17 +232,29 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                         {sp.title}
                       </h3>
 
-                      <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{sp.upload_date}</span>
-                        </span>
-                        {sp.duration && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{sp.duration}</span>
+                      <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
+                        <div className="flex items-center gap-2.5 font-mono text-[10px] text-stone-500">
+                          <span className="inline-flex items-center gap-1" title="Views">
+                            <Eye className="w-3 h-3 text-[#064E3B]" />
+                            <span>{(sp.views_count ?? 0).toLocaleString()}</span>
                           </span>
-                        )}
+                          <span className="inline-flex items-center gap-1" title="Likes">
+                            <Heart className="w-3 h-3 text-rose-500" />
+                            <span>{(sp.likes_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Comments">
+                            <MessageSquare className="w-3 h-3 text-emerald-700" />
+                            <span>{(sp.comments_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Shares">
+                            <Share2 className="w-3 h-3 text-sky-600" />
+                            <span>{(sp.shares_count ?? 0).toLocaleString()}</span>
+                          </span>
+                        </div>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <Clock className="w-3 h-3" />
+                          <span>{sp.duration || sp.upload_date}</span>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -293,11 +305,25 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                       <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight">
                         {reel.title}
                       </h4>
-                      <div className="flex items-center justify-between text-[10px] text-stone-300 mt-1 font-mono">
-                        <span className="flex items-center gap-1">
-                          <Eye className="w-3 h-3 text-[#D4AF37]" />
-                          <span>{(reel.views_count ?? 0).toLocaleString()}</span>
-                        </span>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-stone-200 mt-1.5 font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-0.5" title="Views">
+                            <Eye className="w-3 h-3 text-[#D4AF37]" />
+                            <span>{(reel.views_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-0.5" title="Likes">
+                            <Heart className="w-3 h-3 text-rose-400" />
+                            <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-0.5" title="Comments">
+                            <MessageSquare className="w-3 h-3 text-emerald-300" />
+                            <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-0.5" title="Shares">
+                            <Share2 className="w-3 h-3 text-sky-300" />
+                            <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
+                          </span>
+                        </div>
                         {reel.duration && <span>{reel.duration}</span>}
                       </div>
                     </div>

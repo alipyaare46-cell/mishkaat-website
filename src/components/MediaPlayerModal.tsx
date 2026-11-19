@@ -16,7 +16,8 @@ import {
   Download,
   Gauge,
   ExternalLink,
-  AlertCircle
+  AlertCircle,
+  Eye
 } from 'lucide-react';
 import { Speech } from '../types';
 import { api } from '../services/api';
@@ -39,9 +40,15 @@ interface MediaPlayerModalProps {
   speech: Speech | null;
   onClose: () => void;
   onNavigateScholar?: (slug: string) => void;
+  onSpeechStatsUpdated?: (speechId: string, patch: Partial<Speech>) => void;
 }
 
-export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onClose, onNavigateScholar }) => {
+export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
+  speech,
+  onClose,
+  onNavigateScholar,
+  onSpeechStatsUpdated
+}) => {
   const { user, isBookmarked, toggleBookmark, openAuthModal } = useUserAuth();
   const { admin } = useAuth();
   const effectiveUser = user || (admin ? { id: admin.id, full_name: admin.full_name || 'Admin' } : null);
@@ -50,8 +57,11 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Social interactions state
-  const [likesCount, setLikesCount] = useState<number>(0);
+  const [viewsCount, setViewsCount] = useState<number>(speech?.views_count ?? 0);
+  const [likesCount, setLikesCount] = useState<number>(speech?.likes_count ?? 0);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [sharesCount, setSharesCount] = useState<number>(speech?.shares_count ?? 0);
+  const [savesCount, setSavesCount] = useState<number>(speech?.saves_count ?? 0);
   const [comments, setComments] = useState<any[]>([]);
   const [isLiking, setIsLiking] = useState(false);
   const [igStreamFailed, setIgStreamFailed] = useState(false);
@@ -110,25 +120,72 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
     }
   };
 
-  // Load interactions when speech opens
+  // Load interactions when speech or signed-in user opens/changes
   const loadInteractions = useCallback(async (speechId: string) => {
     if (!speechId) return;
     try {
       const data = await api.getInteractions('speech', speechId);
       setLikesCount(data.likes_count || 0);
       setHasLiked(!!data.has_liked);
+      setSharesCount(data.shares_count ?? 0);
+      setSavesCount(data.saves_count ?? 0);
+      if (typeof data.views_count === 'number') {
+        setViewsCount(data.views_count);
+      }
       setComments(data.comments || []);
+      onSpeechStatsUpdated?.(speechId, {
+        likes_count: data.likes_count || 0,
+        shares_count: data.shares_count ?? 0,
+        saves_count: data.saves_count ?? 0,
+        comments_count: (data.comments || []).length,
+        ...(typeof data.views_count === 'number' ? { views_count: data.views_count } : {})
+      });
     } catch (err) {
       console.warn('Could not load speech interactions:', err);
     }
-  }, []);
+  }, [onSpeechStatsUpdated]);
 
   useEffect(() => {
     setIgStreamFailed(false);
     if (speech && speech.id) {
+      setViewsCount(speech.views_count ?? 0);
+      setLikesCount(speech.likes_count ?? 0);
+      setSharesCount(speech.shares_count ?? 0);
+      setSavesCount(speech.saves_count ?? 0);
       loadInteractions(speech.id);
+
+      const viewerIdentity = user?.id ? `u_${user.id}` : admin?.id ? `a_${admin.id}` : 'guest';
+      const viewKey = `${viewerIdentity}:${speech.id}`;
+      try {
+        const raw = localStorage.getItem('mishkaat_viewed_speeches_map');
+        const viewedMap: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+        if (!viewedMap[viewKey]) {
+          viewedMap[viewKey] = true;
+          localStorage.setItem('mishkaat_viewed_speeches_map', JSON.stringify(viewedMap));
+          api.incrementSpeechView(speech.id)
+            .then((res) => {
+              setViewsCount(res.views_count);
+              onSpeechStatsUpdated?.(speech.id, { views_count: res.views_count });
+            })
+            .catch(() => {
+              try {
+                const curr = localStorage.getItem('mishkaat_viewed_speeches_map');
+                const parsed: Record<string, boolean> = curr ? JSON.parse(curr) : {};
+                delete parsed[viewKey];
+                localStorage.setItem('mishkaat_viewed_speeches_map', JSON.stringify(parsed));
+              } catch {}
+            });
+        }
+      } catch {
+        api.incrementSpeechView(speech.id)
+          .then((res) => {
+            setViewsCount(res.views_count);
+            onSpeechStatsUpdated?.(speech.id, { views_count: res.views_count });
+          })
+          .catch(() => {});
+      }
     }
-  }, [speech?.id, loadInteractions]);
+  }, [speech?.id, effectiveUser?.id, loadInteractions, onSpeechStatsUpdated]);
 
   if (!speech) return null;
 
@@ -168,6 +225,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
       const res = await api.toggleLike('speech', speech.id);
       setHasLiked(res.liked);
       setLikesCount(res.likes_count);
+      onSpeechStatsUpdated?.(speech.id, { likes_count: res.likes_count });
     } catch (err) {
       setHasLiked(prevLiked);
       setLikesCount(prevCount);
@@ -182,7 +240,28 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
       openAuthModal('signin');
       return;
     }
+    const prevCount = savesCount;
+    const optimisticNext = isSaved ? Math.max(0, prevCount - 1) : prevCount + 1;
+    setSavesCount(optimisticNext);
     await toggleBookmark('speech', speech.id);
+    try {
+      const fresh = await api.getInteractions('speech', speech.id);
+      const exactSaves = fresh.saves_count ?? optimisticNext;
+      setSavesCount(exactSaves);
+      onSpeechStatsUpdated?.(speech.id, { saves_count: exactSaves });
+    } catch {
+      onSpeechStatsUpdated?.(speech.id, { saves_count: optimisticNext });
+    }
+  };
+
+  const handleShareRecorded = async (platform: string) => {
+    try {
+      const res = await api.recordShare('speech', speech.id, platform);
+      setSharesCount(res.shares_count);
+      onSpeechStatsUpdated?.(speech.id, { shares_count: res.shares_count });
+    } catch {
+      // Ignore
+    }
   };
 
   const scrollToComments = () => {
@@ -417,48 +496,54 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
           </div>
         </div>
 
-        {/* Social Interaction Action Bar (Like, Comment, Save, Share) */}
-        <div className="px-5 py-3 bg-stone-50 border-b border-stone-200 flex items-center justify-between text-xs shrink-0 select-none">
-          <div className="flex items-center gap-3 sm:gap-6">
+        {/* Social Interaction Action Bar (Views, Like, Comment, Save, Share) */}
+        <div className="px-4 sm:px-5 py-3 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 select-none">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+            {/* Views */}
+            <div className="flex items-center gap-1.5 font-semibold text-stone-600 tabular-nums" title="Unique Views">
+              <Eye className="w-4 h-4 text-[#064E3B]" />
+              <span>{viewsCount.toLocaleString()} {viewsCount === 1 ? 'View' : 'Views'}</span>
+            </div>
+
             {/* Like */}
             <button
               onClick={handleLike}
-              className={`flex items-center gap-1.5 font-bold transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 font-bold transition-colors cursor-pointer tabular-nums ${
                 hasLiked ? 'text-rose-600' : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <Heart className={`w-4 h-4 ${hasLiked ? 'fill-rose-600 text-rose-600' : ''}`} />
-              <span>{likesCount} {likesCount === 1 ? 'Like' : 'Likes'}</span>
+              <span>{likesCount.toLocaleString()} {likesCount === 1 ? 'Like' : 'Likes'}</span>
             </button>
 
             {/* Comments button */}
             <button
               onClick={scrollToComments}
-              className="flex items-center gap-1.5 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer tabular-nums"
             >
               <MessageSquare className="w-4 h-4 text-[#064E3B]" />
-              <span>{comments.length} Reflections</span>
+              <span>{comments.length.toLocaleString()} Comments</span>
             </button>
 
             {/* Save (Bookmark) */}
             <button
               onClick={handleSave}
-              className={`flex items-center gap-1.5 font-semibold transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 font-semibold transition-colors cursor-pointer tabular-nums ${
                 isSaved ? 'text-[#D4AF37] font-bold' : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-[#D4AF37] text-[#D4AF37]' : ''}`} />
-              <span>{isSaved ? 'Saved' : 'Save'}</span>
+              <span>{isSaved ? 'Saved' : 'Save'} ({savesCount.toLocaleString()})</span>
             </button>
           </div>
 
           {/* Share */}
           <button
             onClick={() => setIsShareOpen(true)}
-            className="flex items-center gap-1.5 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer tabular-nums"
           >
             <Share2 className="w-4 h-4" />
-            <span>Share</span>
+            <span>{sharesCount.toLocaleString()} {sharesCount === 1 ? 'Share' : 'Shares'}</span>
           </button>
         </div>
 
@@ -532,10 +617,18 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
               itemTitle={speech.title}
               comments={comments}
               onCommentAdded={(newComment) => {
-                setComments((prev) => [newComment, ...prev]);
+                setComments((prev) => {
+                  const next = [newComment, ...prev];
+                  onSpeechStatsUpdated?.(speech.id, { comments_count: next.length });
+                  return next;
+                });
               }}
               onCommentDeleted={(deletedId) => {
-                setComments((prev) => prev.filter((c) => c.id !== deletedId));
+                setComments((prev) => {
+                  const next = prev.filter((c) => c.id !== deletedId);
+                  onSpeechStatsUpdated?.(speech.id, { comments_count: next.length });
+                  return next;
+                });
               }}
             />
           </div>
@@ -559,6 +652,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({ speech, onCl
         onClose={() => setIsShareOpen(false)}
         title={speech.title}
         category={speech.speech_type}
+        onShare={handleShareRecorded}
       />
     </div>
   );

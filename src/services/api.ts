@@ -23,6 +23,28 @@ import {
 
 const API_BASE = '/api';
 
+export function getOrCreateVisitorId(): string {
+  try {
+    const key = 'mishkaat_visitor_id';
+    let id = localStorage.getItem(key);
+    if (!id || id.length < 8) {
+      id =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? `vis_${crypto.randomUUID().replace(/-/g, '')}`
+          : `vis_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+function getVisitorHeader(): Record<string, string> {
+  const vid = getOrCreateVisitorId();
+  return vid ? { 'X-Visitor-Id': vid } : {};
+}
+
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('mishkaat_admin_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -36,6 +58,7 @@ function getUserAuthHeader(): Record<string, string> {
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
+    ...getVisitorHeader(),
     ...getAuthHeader(),
     ...options.headers
   };
@@ -56,6 +79,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 async function userRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
+    ...getVisitorHeader(),
     ...getUserAuthHeader(),
     ...options.headers
   };
@@ -255,7 +279,7 @@ export const api = {
     }),
   getStats: () => request<WebsiteStats>('/stats'),
   incrementSiteView: (data?: { page_path?: string; identifyOnly?: boolean }) =>
-    userRequest<{ websiteViews: number }>('/stats/view', {
+    userRequest<{ websiteViews: number; counted?: boolean }>('/stats/view', {
       method: 'POST',
       body: JSON.stringify(data || {})
     }),
@@ -308,6 +332,10 @@ export const api = {
     request<{ success: boolean }>(`/speeches/${id}`, {
       method: 'DELETE'
     }),
+  incrementSpeechView: (id: string) =>
+    userRequest<{ id: string; views_count: number; counted?: boolean }>(`/speeches/${id}/view`, {
+      method: 'POST'
+    }),
 
   // Reels
   getReels: (params: { all?: boolean; scholar_id?: string; search?: string } = {}) => {
@@ -332,7 +360,7 @@ export const api = {
       method: 'DELETE'
     }),
   incrementReelView: (id: string) =>
-    userRequest<{ id: string; views_count: number }>(`/reels/${id}/view`, {
+    userRequest<{ id: string; views_count: number; counted?: boolean }>(`/reels/${id}/view`, {
       method: 'POST'
     }),
 
@@ -507,18 +535,23 @@ export const api = {
   getUserBookmarks: () => userRequest<UserBookmark[]>('/user/bookmarks'),
   getUserBookmarkIds: () => userRequest<{ item_type: string; item_id: string }[]>('/user/bookmarks/ids'),
   toggleBookmark: (item_type: string, item_id: string) =>
-    userRequest<{ bookmarked: boolean; message: string }>('/user/bookmarks/toggle', {
+    userRequest<{ bookmarked: boolean; message: string; saves_count?: number }>('/user/bookmarks/toggle', {
       method: 'POST',
       body: JSON.stringify({ item_type, item_id })
     }),
 
-  // Social Interactions (Likes & Comments for Videos & Reels)
+  // Social Interactions (Likes, Shares, Saves & Comments for Videos & Reels)
   getInteractions: (itemType: string, itemId: string) =>
     userRequest<InteractionsData>(`/interactions/${itemType}/${itemId}`),
   toggleLike: (itemType: string, itemId: string) =>
     userRequest<{ liked: boolean; likes_count: number }>('/interactions/like', {
       method: 'POST',
       body: JSON.stringify({ item_type: itemType, item_id: itemId })
+    }),
+  recordShare: (itemType: string, itemId: string, platform = 'link') =>
+    userRequest<{ shared: boolean; shares_count: number }>('/interactions/share', {
+      method: 'POST',
+      body: JSON.stringify({ item_type: itemType, item_id: itemId, platform })
     }),
   postComment: (itemType: string, itemId: string, content: string) =>
     userRequest<{ comment: CommentItem; comments_count: number }>('/interactions/comment', {

@@ -58,12 +58,20 @@ export function initDatabase() {
       duration TEXT,
       upload_date TEXT NOT NULL,
       tags TEXT,
+      views_count INTEGER DEFAULT 0,
       is_published INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (scholar_id) REFERENCES scholars(id) ON DELETE CASCADE
     );
   `);
+
+  // Safe migration for existing databases missing views_count on speeches
+  try {
+    db.exec(`ALTER TABLE speeches ADD COLUMN views_count INTEGER DEFAULT 0`);
+  } catch {
+    // Column already exists
+  }
 
   // 4. Reels table
   db.exec(`
@@ -245,7 +253,7 @@ export function initDatabase() {
     );
   `);
 
-  // 16. User Bookmarks & Saved Items table
+  // 16. User Bookmarks & Saved Items table (no FK on user_id so both members & admins can save)
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_bookmarks (
       id TEXT PRIMARY KEY,
@@ -253,8 +261,7 @@ export function initDatabase() {
       item_type TEXT NOT NULL,
       item_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE(user_id, item_type, item_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      UNIQUE(user_id, item_type, item_id)
     );
   `);
 
@@ -266,8 +273,7 @@ export function initDatabase() {
       item_type TEXT NOT NULL,
       item_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE(user_id, item_type, item_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      UNIQUE(user_id, item_type, item_id)
     );
   `);
 
@@ -280,8 +286,94 @@ export function initDatabase() {
       item_type TEXT NOT NULL,
       item_id TEXT NOT NULL,
       content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // Safely drop legacy FOREIGN KEY (user_id) REFERENCES users(id) if an existing DB has it
+  const dropLegacyUserFk = (tableName: string, createNewSql: string, cols: string) => {
+    try {
+      const schemaRow = db
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get(tableName) as { sql?: string } | undefined;
+      if (schemaRow?.sql && /REFERENCES\s+users\s*\(\s*id\s*\)/i.test(schemaRow.sql)) {
+        db.pragma('foreign_keys = OFF');
+        db.transaction(() => {
+          db.exec(`DROP TABLE IF EXISTS ${tableName}_mig_tmp;`);
+          db.exec(createNewSql);
+          db.exec(`INSERT OR IGNORE INTO ${tableName}_mig_tmp (${cols}) SELECT ${cols} FROM ${tableName};`);
+          db.exec(`DROP TABLE ${tableName};`);
+          db.exec(`ALTER TABLE ${tableName}_mig_tmp RENAME TO ${tableName};`);
+        })();
+        db.pragma('foreign_keys = ON');
+      }
+    } catch (err) {
+      db.pragma('foreign_keys = ON');
+      console.warn(`Migration warning for ${tableName}:`, err);
+    }
+  };
+
+  dropLegacyUserFk(
+    'user_bookmarks',
+    `CREATE TABLE user_bookmarks_mig_tmp (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      UNIQUE(user_id, item_type, item_id)
+    );`,
+    'id, user_id, item_type, item_id, created_at'
+  );
+  dropLegacyUserFk(
+    'likes',
+    `CREATE TABLE likes_mig_tmp (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, item_type, item_id)
+    );`,
+    'id, user_id, item_type, item_id, created_at'
+  );
+  dropLegacyUserFk(
+    'comments',
+    `CREATE TABLE comments_mig_tmp (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
+    'id, user_id, user_name, item_type, item_id, content, created_at'
+  );
+
+  // 18b. Shares tracking table (tracks shares across users & guests)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shares (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      visitor_key TEXT,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      platform TEXT DEFAULT 'link',
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // 18c. Unique Views deduplication table (ensures 1 view per ID/visitor)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS unique_views (
+      id TEXT PRIMARY KEY,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      viewer_key TEXT NOT NULL,
+      user_id TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(target_type, target_id, viewer_key)
     );
   `);
 
@@ -330,8 +422,26 @@ export function initDatabase() {
     );
   `);
 
+  // Backfill unique_views from historical signed-in view_logs so existing IDs don't double-count
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO unique_views (id, target_type, target_id, viewer_key, user_id, created_at)
+      SELECT 'uv_' || id, target_type, target_id, 'user:' || user_id, user_id, created_at
+      FROM view_logs
+      WHERE user_id IS NOT NULL AND target_id IS NOT NULL;
+    `);
+  } catch {
+    // Ignore backfill errors
+  }
+
   // Create indexes for fast searching and relations
   db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_shares_item ON shares(item_type, item_id);
+    CREATE INDEX IF NOT EXISTS idx_unique_views_target ON unique_views(target_type, target_id);
+    CREATE INDEX IF NOT EXISTS idx_unique_views_user ON unique_views(target_type, target_id, user_id);
+    CREATE INDEX IF NOT EXISTS idx_likes_item ON likes(item_type, item_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_item ON comments(item_type, item_id);
+    CREATE INDEX IF NOT EXISTS idx_bookmarks_item ON user_bookmarks(item_type, item_id);
     CREATE INDEX IF NOT EXISTS idx_view_logs_created ON view_logs(created_at);
     CREATE INDEX IF NOT EXISTS idx_view_logs_target ON view_logs(target_type, target_id);
     CREATE INDEX IF NOT EXISTS idx_otp_email ON password_reset_otps(email);

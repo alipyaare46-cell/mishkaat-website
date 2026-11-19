@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Film, Play, Search, User, Filter, ArrowRight, Eye } from 'lucide-react';
+import { Film, Play, Search, Eye, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { Reel, Scholar } from '../types';
 import { getInstagramThumbUrl } from '../utils/media';
 
@@ -214,9 +214,23 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
                     <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight group-hover:text-emerald-300 transition-colors">
                       {reel.title}
                     </h4>
-                    <div className="flex items-center gap-1 text-[10px] text-stone-300 font-mono pt-0.5">
-                      <Eye className="w-3 h-3 text-[#D4AF37]" />
-                      <span>{(reel.views_count ?? 0).toLocaleString()} views</span>
+                    <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-stone-200 font-mono pt-1">
+                      <span className="inline-flex items-center gap-1" title="Views">
+                        <Eye className="w-3 h-3 text-[#D4AF37]" />
+                        <span>{(reel.views_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Likes">
+                        <Heart className="w-3 h-3 text-rose-400" />
+                        <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Comments">
+                        <MessageSquare className="w-3 h-3 text-emerald-300" />
+                        <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1" title="Shares">
+                        <Share2 className="w-3 h-3 text-sky-300" />
+                        <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
+                      </span>
                     </div>
                   </div>
                 </div>

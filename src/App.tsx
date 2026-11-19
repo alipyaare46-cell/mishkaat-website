@@ -167,59 +167,96 @@ function MainApp() {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Increment website view count once per browser session on public site
+  // Strict 1-view-per-ID website view tracking (persisted in localStorage + backend unique_views)
   useEffect(() => {
     if (currentRoute === 'admin') return;
-    if (sessionStorage.getItem('mishkaat_site_viewed')) return;
-    sessionStorage.setItem('mishkaat_site_viewed', '1');
-    if (user?.id) {
-      sessionStorage.setItem('mishkaat_identified_uid', user.id);
+    const viewerIdentity = user?.id
+      ? `u_${user.id}`
+      : admin?.id
+        ? `a_${admin.id}`
+        : 'guest';
+
+    let viewedMap: Record<string, number> = {};
+    try {
+      const raw = localStorage.getItem('mishkaat_site_viewed_map');
+      if (raw) viewedMap = JSON.parse(raw) || {};
+    } catch {
+      viewedMap = {};
     }
+
+    if (viewedMap[viewerIdentity]) return;
+
+    viewedMap[viewerIdentity] = Date.now();
+    try {
+      localStorage.setItem('mishkaat_site_viewed_map', JSON.stringify(viewedMap));
+    } catch {}
+
     api.incrementSiteView({ page_path: window.location.pathname || '/' })
       .then((res) => {
         setStats((prev) => (prev ? { ...prev, websiteViews: res.websiteViews } : prev));
       })
       .catch(() => {
-        sessionStorage.removeItem('mishkaat_site_viewed');
+        try {
+          const currentRaw = localStorage.getItem('mishkaat_site_viewed_map');
+          const currentMap = currentRaw ? JSON.parse(currentRaw) : {};
+          delete currentMap[viewerIdentity];
+          localStorage.setItem('mishkaat_site_viewed_map', JSON.stringify(currentMap));
+        } catch {}
       });
-  }, [currentRoute, user?.id]);
+  }, [currentRoute, user?.id, admin?.id]);
 
-  // If a visitor signs in later during the same browser session, record their identified profile
-  useEffect(() => {
-    if (currentRoute === 'admin' || !user?.id) return;
-    if (sessionStorage.getItem('mishkaat_identified_uid') === user.id) return;
-    sessionStorage.setItem('mishkaat_identified_uid', user.id);
-    const alreadyCountedSiteView = Boolean(sessionStorage.getItem('mishkaat_site_viewed'));
-    if (!alreadyCountedSiteView) {
-      sessionStorage.setItem('mishkaat_site_viewed', '1');
-    }
-    api.incrementSiteView({
-      page_path: window.location.pathname || '/',
-      identifyOnly: alreadyCountedSiteView
-    })
-      .then((res) => {
-        setStats((prev) => (prev ? { ...prev, websiteViews: res.websiteViews } : prev));
-      })
-      .catch(() => {
-        sessionStorage.removeItem('mishkaat_identified_uid');
-      });
-  }, [currentRoute, user?.id]);
-
-  const handleReelViewed = useCallback((reelId: string, viewsCount: number) => {
+  const handleReelViewed = useCallback((reelId: string, viewsCount: number, counted?: boolean) => {
     setReels((prev) =>
       prev.map((item) => (item.id === reelId ? { ...item, views_count: viewsCount } : item))
     );
     setActiveReel((prev) =>
       prev && prev.id === reelId ? { ...prev, views_count: viewsCount } : prev
     );
-    setStats((prev) =>
-      prev
-        ? {
-            ...prev,
-            totalReelViews: (prev.totalReelViews ?? 0) + 1
-          }
-        : prev
+    if (counted !== false) {
+      setStats((prev) =>
+        prev
+          ? {
+              ...prev,
+              totalReelViews: (prev.totalReelViews ?? 0) + 1
+            }
+          : prev
+      );
+    }
+  }, []);
+
+  const handleReelStatsUpdated = useCallback((reelId: string, patch: Partial<Reel>) => {
+    setReels((prev) =>
+      prev.map((item) => (item.id === reelId ? { ...item, ...patch } : item))
     );
+    setActiveReel((prev) =>
+      prev && prev.id === reelId ? { ...prev, ...patch } : prev
+    );
+  }, []);
+
+  const handleSpeechStatsUpdated = useCallback((speechId: string, patch: Partial<Speech>) => {
+    let viewDelta = 0;
+    setSpeeches((prev) =>
+      prev.map((item) => {
+        if (item.id !== speechId) return item;
+        if (typeof patch.views_count === 'number' && patch.views_count > (item.views_count ?? 0)) {
+          viewDelta = patch.views_count - (item.views_count ?? 0);
+        }
+        return { ...item, ...patch };
+      })
+    );
+    setActiveSpeech((prev) =>
+      prev && prev.id === speechId ? { ...prev, ...patch } : prev
+    );
+    if (viewDelta > 0) {
+      setStats((prev) =>
+        prev
+          ? {
+              ...prev,
+              totalSpeechViews: (prev.totalSpeechViews ?? 0) + viewDelta
+            }
+          : prev
+      );
+    }
   }, []);
 
   // Handle browser Back and Forward navigation buttons
@@ -440,6 +477,7 @@ function MainApp() {
       <MediaPlayerModal
         speech={activeSpeech}
         onClose={() => setActiveSpeech(null)}
+        onSpeechStatsUpdated={handleSpeechStatsUpdated}
       />
 
       <ReelPlayerModal
@@ -448,6 +486,7 @@ function MainApp() {
         onClose={() => setActiveReel(null)}
         onSelectReel={(r) => setActiveReel(r)}
         onReelViewed={handleReelViewed}
+        onReelStatsUpdated={handleReelStatsUpdated}
       />
 
       <BookReaderModal

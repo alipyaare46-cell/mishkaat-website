@@ -28,6 +28,11 @@ export interface Speech {
   duration: string;
   upload_date: string;
   tags: string;
+  views_count?: number;
+  likes_count?: number;
+  comments_count?: number;
+  shares_count?: number;
+  saves_count?: number;
   is_published: number;
   created_at: string;
   updated_at: string;
@@ -46,6 +51,10 @@ export interface Reel {
   thumbnail: string | null;
   duration: string;
   views_count?: number;
+  likes_count?: number;
+  comments_count?: number;
+  shares_count?: number;
+  saves_count?: number;
   is_published: number;
   created_at: string;
   updated_at: string;
@@ -190,6 +199,11 @@ export interface WebsiteStats {
   };
   websiteViews?: number;
   totalReelViews?: number;
+  totalSpeechViews?: number;
+  totalLikes?: number;
+  totalShares?: number;
+  totalComments?: number;
+  totalSaves?: number;
 }
 
 export interface AdminUser {
@@ -226,6 +240,11 @@ export interface CommentItem {
 export interface InteractionsData {
   likes_count: number;
   has_liked: boolean;
+  shares_count?: number;
+  saves_count?: number;
+  has_saved?: boolean;
+  views_count?: number;
+  comments_count?: number;
   comments: CommentItem[];
 }
 

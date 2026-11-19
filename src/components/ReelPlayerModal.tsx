@@ -45,7 +45,8 @@ interface ReelPlayerModalProps {
   onPrev?: () => void;
   hasNext?: boolean;
   hasPrev?: boolean;
-  onReelViewed?: (reelId: string, viewsCount: number) => void;
+  onReelViewed?: (reelId: string, viewsCount: number, counted?: boolean) => void;
+  onReelStatsUpdated?: (reelId: string, patch: Partial<Reel>) => void;
 }
 
 export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
@@ -58,7 +59,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   onPrev,
   hasNext,
   hasPrev,
-  onReelViewed
+  onReelViewed,
+  onReelStatsUpdated
 }) => {
   const { user, isBookmarked, toggleBookmark, openAuthModal } = useUserAuth();
   const { admin } = useAuth();
@@ -74,8 +76,10 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Social interactions state
-  const [likesCount, setLikesCount] = useState<number>(0);
+  const [likesCount, setLikesCount] = useState<number>(initialReel?.likes_count ?? 0);
   const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [sharesCount, setSharesCount] = useState<number>(initialReel?.shares_count ?? 0);
+  const [savesCount, setSavesCount] = useState<number>(initialReel?.saves_count ?? 0);
   const [comments, setComments] = useState<any[]>([]);
   const [isLiking, setIsLiking] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -154,46 +158,78 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
     }
   };
 
-  // Load interactions (likes & comments) whenever active reel changes
+  // Load interactions (likes, shares, saves & comments) whenever active reel or signed-in user changes
   const loadInteractions = useCallback(async (reelId: string) => {
     try {
       const data = await api.getInteractions('reel', reelId);
       setLikesCount(data.likes_count || 0);
       setHasLiked(!!data.has_liked);
+      setSharesCount(data.shares_count ?? 0);
+      setSavesCount(data.saves_count ?? 0);
       setComments(data.comments || []);
+      if (typeof data.views_count === 'number') {
+        setCurrentReel((prev) =>
+          prev && prev.id === reelId ? { ...prev, views_count: data.views_count } : prev
+        );
+      }
+      onReelStatsUpdated?.(reelId, {
+        likes_count: data.likes_count || 0,
+        shares_count: data.shares_count ?? 0,
+        saves_count: data.saves_count ?? 0,
+        comments_count: (data.comments || []).length,
+        ...(typeof data.views_count === 'number' ? { views_count: data.views_count } : {})
+      });
     } catch (err) {
       console.warn('Could not load reel interactions:', err);
     }
-  }, []);
+  }, [onReelStatsUpdated]);
 
   useEffect(() => {
     if (!currentReel) return;
     setIsPlaying(true);
     setIgStreamFailed(false);
+    setLikesCount(currentReel.likes_count ?? 0);
+    setSharesCount(currentReel.shares_count ?? 0);
+    setSavesCount(currentReel.saves_count ?? 0);
     loadInteractions(currentReel.id);
 
-    // Track unique reel view once per session
+    // Track unique reel view once per ID (backend enforces permanent uniqueness per user ID / visitor)
+    const viewerIdentity = user?.id ? `u_${user.id}` : admin?.id ? `a_${admin.id}` : 'guest';
+    const viewKey = `${viewerIdentity}:${currentReel.id}`;
     try {
-      const raw = sessionStorage.getItem('mishkaat_viewed_reels');
-      const viewedIds: string[] = raw ? JSON.parse(raw) : [];
-      if (!viewedIds.includes(currentReel.id)) {
-        const updatedIds = [...viewedIds, currentReel.id];
-        sessionStorage.setItem('mishkaat_viewed_reels', JSON.stringify(updatedIds));
+      const raw = localStorage.getItem('mishkaat_viewed_reels_map');
+      const viewedMap: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+      if (!viewedMap[viewKey]) {
+        viewedMap[viewKey] = true;
+        localStorage.setItem('mishkaat_viewed_reels_map', JSON.stringify(viewedMap));
         api.incrementReelView(currentReel.id)
           .then((res) => {
             setCurrentReel((prev) =>
               prev && prev.id === currentReel.id ? { ...prev, views_count: res.views_count } : prev
             );
-            if (onReelViewed) {
-              onReelViewed(currentReel.id, res.views_count);
-            }
+            onReelViewed?.(currentReel.id, res.views_count, res.counted);
           })
-          .catch(() => {});
+          .catch(() => {
+            try {
+              const curr = localStorage.getItem('mishkaat_viewed_reels_map');
+              const parsed: Record<string, boolean> = curr ? JSON.parse(curr) : {};
+              delete parsed[viewKey];
+              localStorage.setItem('mishkaat_viewed_reels_map', JSON.stringify(parsed));
+            } catch {}
+          });
       }
     } catch {
-      // Ignore storage errors
+      // Fallback: let server enforce uniqueness
+      api.incrementReelView(currentReel.id)
+        .then((res) => {
+          setCurrentReel((prev) =>
+            prev && prev.id === currentReel.id ? { ...prev, views_count: res.views_count } : prev
+          );
+          onReelViewed?.(currentReel.id, res.views_count, res.counted);
+        })
+        .catch(() => {});
     }
-  }, [currentReel?.id, loadInteractions, onReelViewed]);
+  }, [currentReel?.id, effectiveUser?.id, loadInteractions, onReelViewed]);
 
   // Determine current index and next/prev availability
   const currentIndex = currentReel && reels.length > 0 ? reels.findIndex((r) => r.id === currentReel.id) : -1;
@@ -345,6 +381,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
       const res = await api.toggleLike('reel', currentReel.id);
       setHasLiked(res.liked);
       setLikesCount(res.likes_count);
+      onReelStatsUpdated?.(currentReel.id, { likes_count: res.likes_count });
     } catch (err) {
       // Revert on error
       setHasLiked(prevLiked);
@@ -361,7 +398,29 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
       openAuthModal('signin');
       return;
     }
+    const prevCount = savesCount;
+    const optimisticNext = isSaved ? Math.max(0, prevCount - 1) : prevCount + 1;
+    setSavesCount(optimisticNext);
     await toggleBookmark('reel', currentReel.id);
+    // Sync authoritative global saves_count from server
+    try {
+      const fresh = await api.getInteractions('reel', currentReel.id);
+      const exactSaves = fresh.saves_count ?? optimisticNext;
+      setSavesCount(exactSaves);
+      onReelStatsUpdated?.(currentReel.id, { saves_count: exactSaves });
+    } catch {
+      onReelStatsUpdated?.(currentReel.id, { saves_count: optimisticNext });
+    }
+  };
+
+  const handleShareRecorded = async (platform: string) => {
+    try {
+      const res = await api.recordShare('reel', currentReel.id, platform);
+      setSharesCount(res.shares_count);
+      onReelStatsUpdated?.(currentReel.id, { shares_count: res.shares_count });
+    } catch {
+      // Ignore network error on share analytics
+    }
   };
 
   return (
@@ -722,8 +781,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               >
                 <Heart className={`w-5 h-5 ${hasLiked ? 'fill-white text-white' : 'text-white'}`} />
               </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono">
-                {likesCount}
+              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
+                {likesCount.toLocaleString()}
               </span>
             </button>
 
@@ -742,8 +801,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               >
                 <MessageSquare className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono">
-                {comments.length}
+              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
+                {comments.length.toLocaleString()}
               </span>
             </button>
 
@@ -751,7 +810,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             <button
               onClick={handleSave}
               className="flex flex-col items-center group cursor-pointer focus:outline-none"
-              title={isSaved ? 'Saved to Bookmarks' : 'Save to Bookmarks'}
+              title={isSaved ? `Saved (${savesCount.toLocaleString()} total saves)` : `Save (${savesCount.toLocaleString()} total saves)`}
             >
               <div
                 className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
@@ -762,8 +821,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               >
                 <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-stone-950 text-stone-950' : 'text-white'}`} />
               </div>
-              <span className="text-[10px] font-medium mt-1 text-white drop-shadow-sm">
-                {isSaved ? 'Saved' : 'Save'}
+              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
+                {savesCount.toLocaleString()}
               </span>
             </button>
 
@@ -771,13 +830,13 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             <button
               onClick={() => setIsShareOpen(true)}
               className="flex flex-col items-center group cursor-pointer focus:outline-none"
-              title="Share Reel"
+              title={`Share Reel (${sharesCount.toLocaleString()} shares)`}
             >
               <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 text-white hover:bg-black/70 hover:scale-105 backdrop-blur-md transition-all">
                 <Share2 className="w-5 h-5" />
               </div>
-              <span className="text-[10px] font-medium mt-1 text-white drop-shadow-sm">
-                Share
+              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
+                {sharesCount.toLocaleString()}
               </span>
             </button>
           </div>
@@ -793,10 +852,18 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             isOverlay={true}
             onClose={() => setIsCommentsOpen(false)}
             onCommentAdded={(newComment) => {
-              setComments((prev) => [newComment, ...prev]);
+              setComments((prev) => {
+                const next = [newComment, ...prev];
+                onReelStatsUpdated?.(currentReel.id, { comments_count: next.length });
+                return next;
+              });
             }}
             onCommentDeleted={(deletedId) => {
-              setComments((prev) => prev.filter((c) => c.id !== deletedId));
+              setComments((prev) => {
+                const next = prev.filter((c) => c.id !== deletedId);
+                onReelStatsUpdated?.(currentReel.id, { comments_count: next.length });
+                return next;
+              });
             }}
           />
         )}
@@ -828,6 +895,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
         onClose={() => setIsShareOpen(false)}
         title={currentReel.title}
         category="Islamic Reel"
+        onShare={handleShareRecorded}
       />
     </div>
   );

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { Book } from '../types';
+import { api } from '../services/api';
 import { useUserAuth } from '../context/UserAuthContext';
 import { ShareModal } from './ShareModal';
 
@@ -1225,6 +1226,9 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
         onClose={() => setIsShareOpen(false)}
         title={book.title}
         category="Islamic Book"
+        onShare={(platform) => {
+          api.recordShare('book', book.id, platform).catch(() => {});
+        }}
       />
     </div>
   );
