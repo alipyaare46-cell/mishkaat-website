@@ -1238,13 +1238,17 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
       const headers: Record<string, string> = {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        Accept: '*/*',
-        Referer: 'https://www.instagram.com/'
+        Accept: '*/*'
       };
+      if (/instagram\.com|cdninstagram\.com|fbcdn\.net/i.test(targetUrl)) {
+        headers['Referer'] = 'https://www.instagram.com/';
+      }
       if (req.headers.range) {
         headers['Range'] = req.headers.range;
       }
       return fetch(targetUrl, {
+        method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+        redirect: 'follow',
         headers,
         signal: abortController.signal
       });
@@ -1262,7 +1266,7 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
     }
 
     if (!upstream.ok && upstream.status !== 206) {
-      res.status(502).json({ error: `Upstream Instagram CDN returned ${upstream.status}` });
+      res.status(502).json({ error: `Upstream video server returned ${upstream.status}` });
       return;
     }
 
@@ -1278,7 +1282,7 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
     const contentRange = upstream.headers.get('content-range');
     if (contentRange) res.setHeader('Content-Range', contentRange);
 
-    if (!upstream.body || clientClosed) {
+    if (req.method === 'HEAD' || !upstream.body || clientClosed) {
       res.end();
       return;
     }

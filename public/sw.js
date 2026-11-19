@@ -1,5 +1,5 @@
 // MISHKAAT Platform Service Worker with Instant Auto-Update Architecture
-const CACHE_VERSION = 'mishkaat-v2.8-20261114';
+const CACHE_VERSION = 'mishkaat-v2.9-20261119';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -44,11 +44,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never intercept crawler files or health checks
+  // Never intercept crawler files, health checks, Range video streams, or Instagram media proxy
   if (
     url.pathname === '/robots.txt' ||
     url.pathname === '/sitemap.xml' ||
-    url.pathname === '/health'
+    url.pathname === '/health' ||
+    url.pathname.startsWith('/api/instagram/') ||
+    event.request.headers.has('range')
   ) {
     return;
   }
