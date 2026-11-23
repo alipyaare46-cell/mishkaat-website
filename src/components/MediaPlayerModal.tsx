@@ -17,15 +17,21 @@ import {
   Gauge,
   ExternalLink,
   AlertCircle,
-  Eye
+  Eye,
+  RefreshCw
 } from 'lucide-react';
-import { Speech } from '../types';
+import { Speech, ActivityTabType } from '../types';
 import { api } from '../services/api';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
 import { InstagramVideoEmbed } from './InstagramVideoEmbed';
+import {
+  EngagementActivityModal,
+  StatActivityButton,
+  invalidateActivityCache
+} from './EngagementActivityModal';
 import {
   extractYouTubeId,
   resolveMediaThumbnail,
@@ -65,6 +71,9 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
   const [comments, setComments] = useState<any[]>([]);
   const [isLiking, setIsLiking] = useState(false);
   const [igStreamFailed, setIgStreamFailed] = useState(false);
+  const [igRetryCount, setIgRetryCount] = useState(0);
+  const [igRetryNonce, setIgRetryNonce] = useState(0);
+  const [activityModalTab, setActivityModalTab] = useState<ActivityTabType | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -147,6 +156,9 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
 
   useEffect(() => {
     setIgStreamFailed(false);
+    setIgRetryCount(0);
+    setIgRetryNonce(0);
+    setActivityModalTab(null);
     if (speech && speech.id) {
       setViewsCount(speech.views_count ?? 0);
       setLikesCount(speech.likes_count ?? 0);
@@ -164,6 +176,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
           localStorage.setItem('mishkaat_viewed_speeches_map', JSON.stringify(viewedMap));
           api.incrementSpeechView(speech.id)
             .then((res) => {
+              invalidateActivityCache('speech', speech.id);
               setViewsCount(res.views_count);
               onSpeechStatsUpdated?.(speech.id, { views_count: res.views_count });
             })
@@ -179,6 +192,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
       } catch {
         api.incrementSpeechView(speech.id)
           .then((res) => {
+            invalidateActivityCache('speech', speech.id);
             setViewsCount(res.views_count);
             onSpeechStatsUpdated?.(speech.id, { views_count: res.views_count });
           })
@@ -193,7 +207,9 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
   const youtubeId = extractYouTubeId(mediaUrl);
   const isYouTube = !!youtubeId || mediaUrl.includes('youtube.com') || mediaUrl.includes('youtu.be');
   const isInstagram = !isYouTube && isInstagramUrl(mediaUrl);
-  const instagramStreamUrl = isInstagram ? getInstagramStreamUrl(mediaUrl) : null;
+  const instagramStreamUrl = isInstagram
+    ? getInstagramStreamUrl(mediaUrl, igRetryCount > 0, igRetryNonce || undefined)
+    : null;
   const instagramThumbUrl = isInstagram ? getInstagramThumbUrl(mediaUrl) : null;
   const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(mediaUrl) : null;
   const isInstagramFallbackEmbed = isInstagram && (!instagramStreamUrl || igStreamFailed);
@@ -205,7 +221,8 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
 
   const getYouTubeEmbedUrl = () => {
     if (!youtubeId) return null;
-    return `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1`;
+    const origin = typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
+    return `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1${origin}`;
   };
 
   const handleLike = async () => {
@@ -223,6 +240,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
 
     try {
       const res = await api.toggleLike('speech', speech.id);
+      invalidateActivityCache('speech', speech.id);
       setHasLiked(res.liked);
       setLikesCount(res.likes_count);
       onSpeechStatsUpdated?.(speech.id, { likes_count: res.likes_count });
@@ -244,6 +262,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
     const optimisticNext = isSaved ? Math.max(0, prevCount - 1) : prevCount + 1;
     setSavesCount(optimisticNext);
     await toggleBookmark('speech', speech.id);
+    invalidateActivityCache('speech', speech.id);
     try {
       const fresh = await api.getInteractions('speech', speech.id);
       const exactSaves = fresh.saves_count ?? optimisticNext;
@@ -257,6 +276,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
   const handleShareRecorded = async (platform: string) => {
     try {
       const res = await api.recordShare('speech', speech.id, platform);
+      invalidateActivityCache('speech', speech.id);
       setSharesCount(res.shares_count);
       onSpeechStatsUpdated?.(speech.id, { shares_count: res.shares_count });
     } catch {
@@ -360,6 +380,7 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
           ) : isVideo && mediaUrl ? (
             <div className="w-full relative group bg-black flex items-center justify-center">
               <video
+                key={`${speech.id}-${isInstagram && instagramStreamUrl ? instagramStreamUrl : mediaUrl}`}
                 ref={videoRef}
                 src={isInstagram && instagramStreamUrl ? instagramStreamUrl : mediaUrl}
                 poster={speech.thumbnail || instagramThumbUrl || undefined}
@@ -368,8 +389,13 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
                 playsInline
                 preload="metadata"
                 onError={() => {
-                  if (isInstagram && !igStreamFailed) {
-                    setIgStreamFailed(true);
+                  if (isInstagram) {
+                    if (igRetryCount < 2) {
+                      setIgRetryCount((c) => c + 1);
+                      setIgRetryNonce(Date.now());
+                    } else if (!igStreamFailed) {
+                      setIgStreamFailed(true);
+                    }
                   }
                 }}
                 className="w-full max-h-[380px] object-contain mx-auto bg-black"
@@ -465,18 +491,33 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
               </a>
             )}
 
-            {/* Direct Open in Instagram Button (only in fallback embed mode) */}
+            {/* Retry Direct Stream + Open in Instagram (only in fallback embed mode) */}
             {isInstagramFallbackEmbed && mediaUrl && (
-              <a
-                href={mediaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-fuchsia-600 to-amber-500 hover:opacity-90 text-white rounded text-xs font-semibold transition-opacity cursor-pointer"
-                title="Watch on Instagram"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Instagram ↗</span>
-              </a>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIgStreamFailed(false);
+                    setIgRetryCount(1);
+                    setIgRetryNonce(Date.now());
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold transition-colors cursor-pointer"
+                  title="Direct Video Stream Dubara Chalayein"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Video</span>
+                </button>
+                <a
+                  href={mediaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-fuchsia-600 to-amber-500 hover:opacity-90 text-white rounded text-xs font-semibold transition-opacity cursor-pointer"
+                  title="Watch on Instagram"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Instagram ↗</span>
+                </a>
+              </>
             )}
 
             {/* Download button for uploaded video/audio files & streamed Instagram videos */}
@@ -496,25 +537,52 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
           </div>
         </div>
 
-        {/* Social Interaction Action Bar (Views, Like, Comment, Save, Share) */}
+        {/* Social Interaction Action Bar (Instagram-style Hover/Click IDs for Views, Likes, Saves, Shares) */}
         <div className="px-4 sm:px-5 py-3 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 select-none">
           <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-            {/* Views */}
-            <div className="flex items-center gap-1.5 font-semibold text-stone-600 tabular-nums" title="Unique Views">
-              <Eye className="w-4 h-4 text-[#064E3B]" />
-              <span>{viewsCount.toLocaleString()} {viewsCount === 1 ? 'View' : 'Views'}</span>
-            </div>
+            {/* Views (Hover or click to view IDs) */}
+            <StatActivityButton
+              itemType="speech"
+              itemId={speech.id}
+              itemTitle={speech.title}
+              tab="views"
+              count={viewsCount}
+              label={viewsCount === 1 ? 'View' : 'Views'}
+              popoverAlign="left"
+              popoverDirection="down"
+              onOpenModal={setActivityModalTab}
+              className="font-semibold text-stone-700 hover:text-[#064E3B] py-1"
+              icon={<Eye className="w-4 h-4 text-[#064E3B]" />}
+            />
 
-            {/* Like */}
-            <button
-              onClick={handleLike}
-              className={`flex items-center gap-1.5 font-bold transition-colors cursor-pointer tabular-nums ${
-                hasLiked ? 'text-rose-600' : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Heart className={`w-4 h-4 ${hasLiked ? 'fill-rose-600 text-rose-600' : ''}`} />
-              <span>{likesCount.toLocaleString()} {likesCount === 1 ? 'Like' : 'Likes'}</span>
-            </button>
+            {/* Like (Heart toggles like; Hover/click count shows Who Liked IDs) */}
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleLike}
+                className={`inline-flex items-center gap-1 font-bold transition-colors cursor-pointer py-1 ${
+                  hasLiked ? 'text-rose-600' : 'text-stone-600 hover:text-stone-900'
+                }`}
+                title={hasLiked ? 'Unlike' : 'Like'}
+              >
+                <Heart className={`w-4 h-4 ${hasLiked ? 'fill-rose-600 text-rose-600' : ''}`} />
+              </button>
+              <StatActivityButton
+                itemType="speech"
+                itemId={speech.id}
+                itemTitle={speech.title}
+                tab="likes"
+                count={likesCount}
+                label={likesCount === 1 ? 'Like' : 'Likes'}
+                popoverAlign="left"
+                popoverDirection="down"
+                onOpenModal={setActivityModalTab}
+                className={`font-bold py-1 underline decoration-stone-300 underline-offset-2 ${
+                  hasLiked ? 'text-rose-600' : 'text-stone-600 hover:text-stone-900'
+                }`}
+                icon={<span className="sr-only">Likes</span>}
+              />
+            </div>
 
             {/* Comments button */}
             <button
@@ -525,26 +593,57 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
               <span>{comments.length.toLocaleString()} Comments</span>
             </button>
 
-            {/* Save (Bookmark) */}
-            <button
-              onClick={handleSave}
-              className={`flex items-center gap-1.5 font-semibold transition-colors cursor-pointer tabular-nums ${
-                isSaved ? 'text-[#D4AF37] font-bold' : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-[#D4AF37] text-[#D4AF37]' : ''}`} />
-              <span>{isSaved ? 'Saved' : 'Save'} ({savesCount.toLocaleString()})</span>
-            </button>
+            {/* Save (Bookmark toggles save; Hover/click count shows Saved By IDs) */}
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleSave}
+                className={`inline-flex items-center gap-1 font-semibold transition-colors cursor-pointer py-1 ${
+                  isSaved ? 'text-[#D4AF37] font-bold' : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-[#D4AF37] text-[#D4AF37]' : ''}`} />
+                <span>{isSaved ? 'Saved' : 'Save'}</span>
+              </button>
+              <StatActivityButton
+                itemType="speech"
+                itemId={speech.id}
+                itemTitle={speech.title}
+                tab="saves"
+                count={savesCount}
+                popoverAlign="left"
+                popoverDirection="down"
+                onOpenModal={setActivityModalTab}
+                className="font-semibold text-stone-500 hover:text-[#064E3B] py-1"
+                icon={<span className="text-[10px]">•</span>}
+              />
+            </div>
           </div>
 
-          {/* Share */}
-          <button
-            onClick={() => setIsShareOpen(true)}
-            className="flex items-center gap-1.5 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer tabular-nums"
-          >
-            <Share2 className="w-4 h-4" />
-            <span>{sharesCount.toLocaleString()} {sharesCount === 1 ? 'Share' : 'Shares'}</span>
-          </button>
+          {/* Share (Opens ShareModal; Hover/click count shows Shared By IDs) */}
+          <div className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsShareOpen(true)}
+              className="inline-flex items-center gap-1 font-semibold text-stone-600 hover:text-[#064E3B] transition-colors cursor-pointer py-1"
+              title="Share Speech"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Share</span>
+            </button>
+            <StatActivityButton
+              itemType="speech"
+              itemId={speech.id}
+              itemTitle={speech.title}
+              tab="shares"
+              count={sharesCount}
+              popoverAlign="right"
+              popoverDirection="down"
+              onOpenModal={setActivityModalTab}
+              className="font-semibold text-stone-500 hover:text-[#064E3B] py-1"
+              icon={<span className="text-[10px]">•</span>}
+            />
+          </div>
         </div>
 
         {/* Speech Metadata & Comments Container */}
@@ -653,6 +752,16 @@ export const MediaPlayerModal: React.FC<MediaPlayerModalProps> = ({
         title={speech.title}
         category={speech.speech_type}
         onShare={handleShareRecorded}
+      />
+
+      {/* Instagram-style Views / Likes / Shares / Saves ID List Modal */}
+      <EngagementActivityModal
+        isOpen={!!activityModalTab}
+        onClose={() => setActivityModalTab(null)}
+        itemType="speech"
+        itemId={speech.id}
+        itemTitle={speech.title}
+        initialTab={activityModalTab || 'views'}
       />
     </div>
   );

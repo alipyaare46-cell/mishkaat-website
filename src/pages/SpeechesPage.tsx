@@ -4,6 +4,7 @@ import { Speech, Scholar, SpeechType } from '../types';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { resolveMediaThumbnail, isVideoMedia } from '../utils/media';
+import { StatActivityButton } from '../components/EngagementActivityModal';
 
 interface SpeechesPageProps {
   speeches: Speech[];
@@ -193,10 +194,10 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
             <div
               key={speech.id}
               onClick={() => onPlaySpeech(speech)}
-              className="bg-white rounded-xl border border-stone-200/80 overflow-hidden hover:shadow-md hover:border-[#D4AF37]/50 transition-all flex flex-col justify-between group cursor-pointer"
+              className="bg-white rounded-xl border border-stone-200/80 hover:shadow-md hover:border-[#D4AF37]/50 hover:z-20 relative transition-all flex flex-col justify-between group cursor-pointer"
             >
               {/* Media Thumbnail */}
-              <div className="relative aspect-video bg-stone-900 flex items-center justify-center overflow-hidden">
+              <div className="relative aspect-video bg-stone-900 rounded-t-xl flex items-center justify-center overflow-hidden">
                 <img
                   src={resolveMediaThumbnail(speech.thumbnail, speech.media_url)}
                   alt={speech.title}
@@ -264,22 +265,43 @@ export const SpeechesPage: React.FC<SpeechesPageProps> = ({
 
                 <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
                   <div className="flex items-center gap-3 font-mono text-[10px] text-stone-500">
-                    <span className="inline-flex items-center gap-1" title="Views">
-                      <Eye className="w-3 h-3 text-[#064E3B]" />
-                      <span>{(speech.views_count ?? 0).toLocaleString()}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1" title="Likes">
-                      <Heart className="w-3 h-3 text-rose-500" />
-                      <span>{(speech.likes_count ?? 0).toLocaleString()}</span>
-                    </span>
+                    <StatActivityButton
+                      itemType="speech"
+                      itemId={speech.id}
+                      itemTitle={speech.title}
+                      tab="views"
+                      count={speech.views_count ?? 0}
+                      popoverAlign="left"
+                      popoverDirection="up"
+                      className="hover:text-[#064E3B]"
+                      icon={<Eye className="w-3 h-3 text-[#064E3B]" />}
+                    />
+                    <StatActivityButton
+                      itemType="speech"
+                      itemId={speech.id}
+                      itemTitle={speech.title}
+                      tab="likes"
+                      count={speech.likes_count ?? 0}
+                      popoverAlign="left"
+                      popoverDirection="up"
+                      className="hover:text-rose-600"
+                      icon={<Heart className="w-3 h-3 text-rose-500" />}
+                    />
                     <span className="inline-flex items-center gap-1" title="Comments">
                       <MessageSquare className="w-3 h-3 text-emerald-700" />
                       <span>{(speech.comments_count ?? 0).toLocaleString()}</span>
                     </span>
-                    <span className="inline-flex items-center gap-1" title="Shares">
-                      <Share2 className="w-3 h-3 text-sky-600" />
-                      <span>{(speech.shares_count ?? 0).toLocaleString()}</span>
-                    </span>
+                    <StatActivityButton
+                      itemType="speech"
+                      itemId={speech.id}
+                      itemTitle={speech.title}
+                      tab="shares"
+                      count={speech.shares_count ?? 0}
+                      popoverAlign="left"
+                      popoverDirection="up"
+                      className="hover:text-sky-700"
+                      icon={<Share2 className="w-3 h-3 text-sky-600" />}
+                    />
                   </div>
                   <span className="flex items-center gap-1 shrink-0">
                     <Clock className="w-3 h-3" />

@@ -153,13 +153,17 @@ function extractMediaFromHtml(html: string): { videoUrl: string | null; posterUr
 
 async function verifyVideoStreamUrl(candidateUrl: string): Promise<boolean> {
   try {
+    const headers: Record<string, string> = {
+      'User-Agent': DESKTOP_HEADERS['User-Agent'],
+      Range: 'bytes=0-1'
+    };
+    if (/instagram\.com|cdninstagram\.com|fbcdn\.net/i.test(candidateUrl)) {
+      headers['Referer'] = 'https://www.instagram.com/';
+    }
     const res = await fetch(candidateUrl, {
       method: 'GET',
       redirect: 'follow',
-      headers: {
-        'User-Agent': DESKTOP_HEADERS['User-Agent'],
-        Range: 'bytes=0-1'
-      },
+      headers,
       signal: AbortSignal.timeout(6000)
     });
     const ct = (res.headers.get('content-type') || '').toLowerCase();
@@ -167,7 +171,11 @@ async function verifyVideoStreamUrl(candidateUrl: string): Promise<boolean> {
     try {
       await res.body?.cancel();
     } catch {}
-    return (res.ok || res.status === 206) && ct.startsWith('video/');
+    const looksLikeVideo =
+      ct.startsWith('video/') ||
+      ct.includes('mp4') ||
+      (ct.includes('octet-stream') && /\.(mp4|m4v|mov)(\?|$)/i.test(res.url || candidateUrl));
+    return (res.ok || res.status === 206) && looksLikeVideo;
   } catch {
     return false;
   }
@@ -290,21 +298,16 @@ export async function resolveInstagramMedia(
     // Fall through to Layer 2
   }
 
-  // Layer 2: Open embed relay (vxinstagram.com — works reliably from cloud/Render datacenter IPs)
-  if (!videoUrl) {
-    const vx = await resolveViaOpenProxy('vxinstagram.com', type, code);
-    if (!posterUrl && vx.posterUrl) posterUrl = vx.posterUrl;
-    if (vx.videoUrl) videoUrl = vx.videoUrl;
+  // Layer 2: Open embed relays (vxinstagram, uuinstagram, kkinstagram, ddinstagram)
+  const relayHosts = ['vxinstagram.com', 'uuinstagram.com', 'kkinstagram.com', 'ddinstagram.com'];
+  for (const host of relayHosts) {
+    if (videoUrl) break;
+    const relay = await resolveViaOpenProxy(host, type, code);
+    if (!posterUrl && relay.posterUrl) posterUrl = relay.posterUrl;
+    if (relay.videoUrl) videoUrl = relay.videoUrl;
   }
 
-  // Layer 3: Secondary open relay (uuinstagram.com — strictly verified Content-Type: video/*)
-  if (!videoUrl) {
-    const uu = await resolveViaOpenProxy('uuinstagram.com', type, code);
-    if (!posterUrl && uu.posterUrl) posterUrl = uu.posterUrl;
-    if (uu.videoUrl) videoUrl = uu.videoUrl;
-  }
-
-  // Layer 4: Instagram /embed/captioned/ HTML fallback
+  // Layer 3: Instagram /embed/captioned/ HTML fallback
   if (!videoUrl) {
     try {
       const res = await fetch(`https://www.instagram.com/${type}/${code}/embed/captioned/`, {

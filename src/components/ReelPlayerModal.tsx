@@ -18,15 +18,21 @@ import {
   RotateCw,
   Gauge,
   Download,
-  Eye
+  Eye,
+  RefreshCw
 } from 'lucide-react';
-import { Reel } from '../types';
+import { Reel, ActivityTabType } from '../types';
 import { api } from '../services/api';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useAuth } from '../context/AuthContext';
 import { CommentsSection } from './CommentsSection';
 import { ShareModal } from './ShareModal';
 import { InstagramVideoEmbed } from './InstagramVideoEmbed';
+import {
+  EngagementActivityModal,
+  StatActivityButton,
+  invalidateActivityCache
+} from './EngagementActivityModal';
 import {
   extractYouTubeId,
   isInstagramUrl,
@@ -85,7 +91,12 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isFitMode, setIsFitMode] = useState(false); // Toggle between full bleed and complete uncropped fit
   const [isInstagramZoom, setIsInstagramZoom] = useState(false); // Optional zoom for fallback embed
-  const [igStreamFailed, setIgStreamFailed] = useState(false); // Fallback to embed only if direct stream fails
+  const [igStreamFailed, setIgStreamFailed] = useState(false); // Fallback to embed only if direct stream fails after retries
+  const [igRetryCount, setIgRetryCount] = useState(0);
+  const [igRetryNonce, setIgRetryNonce] = useState(0);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [activityModalTab, setActivityModalTab] = useState<ActivityTabType | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -127,6 +138,11 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   useEffect(() => {
     setCurrentReel(initialReel);
     setIgStreamFailed(false);
+    setIgRetryCount(0);
+    setIgRetryNonce(0);
+    setVideoCurrentTime(0);
+    setVideoDuration(0);
+    setActivityModalTab(null);
     if (initialReel) {
       setIsCommentsOpen(false);
       setShowSpeedMenu(false);
@@ -188,6 +204,10 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
     if (!currentReel) return;
     setIsPlaying(true);
     setIgStreamFailed(false);
+    setIgRetryCount(0);
+    setIgRetryNonce(0);
+    setVideoCurrentTime(0);
+    setVideoDuration(0);
     setLikesCount(currentReel.likes_count ?? 0);
     setSharesCount(currentReel.shares_count ?? 0);
     setSavesCount(currentReel.saves_count ?? 0);
@@ -204,6 +224,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
         localStorage.setItem('mishkaat_viewed_reels_map', JSON.stringify(viewedMap));
         api.incrementReelView(currentReel.id)
           .then((res) => {
+            invalidateActivityCache('reel', currentReel.id);
             setCurrentReel((prev) =>
               prev && prev.id === currentReel.id ? { ...prev, views_count: res.views_count } : prev
             );
@@ -222,6 +243,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
       // Fallback: let server enforce uniqueness
       api.incrementReelView(currentReel.id)
         .then((res) => {
+          invalidateActivityCache('reel', currentReel.id);
           setCurrentReel((prev) =>
             prev && prev.id === currentReel.id ? { ...prev, views_count: res.views_count } : prev
           );
@@ -320,17 +342,27 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
   const isYouTube = currentReel.video_url.includes('youtube.com') || currentReel.video_url.includes('youtu.be');
   const isInstagram = !isYouTube && isInstagramUrl(currentReel.video_url);
-  const instagramStreamUrl = isInstagram ? getInstagramStreamUrl(currentReel.video_url) : null;
+  const instagramStreamUrl = isInstagram
+    ? getInstagramStreamUrl(currentReel.video_url, igRetryCount > 0, igRetryNonce || undefined)
+    : null;
   const instagramThumbUrl = isInstagram ? getInstagramThumbUrl(currentReel.video_url) : null;
   const instagramEmbedUrl = isInstagram ? getInstagramEmbedUrl(currentReel.video_url) : null;
   const isInstagramFallbackEmbed = isInstagram && (!instagramStreamUrl || igStreamFailed);
   const resolvedVideoSrc = isInstagram && instagramStreamUrl ? instagramStreamUrl : currentReel.video_url;
   const resolvedPosterSrc = currentReel.thumbnail || instagramThumbUrl || undefined;
 
+  const formatVideoTime = (sec: number) => {
+    if (!isFinite(sec) || sec < 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   const getYouTubeEmbed = (url: string) => {
     const videoId = extractYouTubeId(url);
     if (!videoId) return null;
-    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&loop=1&playsinline=1&controls=1&modestbranding=1&rel=0`;
+    const origin = typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&loop=1&playlist=${videoId}&playsinline=1&controls=1&modestbranding=1&rel=0${origin}`;
   };
 
   const togglePlay = () => {
@@ -379,6 +411,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
     try {
       const res = await api.toggleLike('reel', currentReel.id);
+      invalidateActivityCache('reel', currentReel.id);
       setHasLiked(res.liked);
       setLikesCount(res.likes_count);
       onReelStatsUpdated?.(currentReel.id, { likes_count: res.likes_count });
@@ -402,6 +435,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
     const optimisticNext = isSaved ? Math.max(0, prevCount - 1) : prevCount + 1;
     setSavesCount(optimisticNext);
     await toggleBookmark('reel', currentReel.id);
+    invalidateActivityCache('reel', currentReel.id);
     // Sync authoritative global saves_count from server
     try {
       const fresh = await api.getInteractions('reel', currentReel.id);
@@ -416,6 +450,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
   const handleShareRecorded = async (platform: string) => {
     try {
       const res = await api.recordShare('reel', currentReel.id, platform);
+      invalidateActivityCache('reel', currentReel.id);
       setSharesCount(res.shares_count);
       onReelStatsUpdated?.(currentReel.id, { shares_count: res.shares_count });
     } catch {
@@ -478,18 +513,33 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </button>
             )}
             {isInstagramFallbackEmbed && (
-              <button
-                type="button"
-                onClick={() => setIsInstagramZoom(!isInstagramZoom)}
-                className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
-                  isInstagramZoom
-                    ? 'bg-[#064E3B] text-white border-emerald-500'
-                    : 'bg-black/50 hover:bg-black/70 text-stone-300 border-white/15'
-                }`}
-                title={isInstagramZoom ? 'Reset Zoom' : 'Zoom Video'}
-              >
-                {isInstagramZoom ? 'Fit' : 'Zoom +'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIgStreamFailed(false);
+                    setIgRetryCount(1);
+                    setIgRetryNonce(Date.now());
+                  }}
+                  className="px-2 py-1 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold border border-emerald-500/40 flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Direct Video Stream Dubara Chalayein"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Retry</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsInstagramZoom(!isInstagramZoom)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                    isInstagramZoom
+                      ? 'bg-[#064E3B] text-white border-emerald-500'
+                      : 'bg-black/50 hover:bg-black/70 text-stone-300 border-white/15'
+                  }`}
+                  title={isInstagramZoom ? 'Reset Zoom' : 'Zoom Video'}
+                >
+                  {isInstagramZoom ? 'Fit' : 'Zoom +'}
+                </button>
+              </>
             )}
 
             {/* Speed Selector Toggle (native video & YouTube) */}
@@ -585,31 +635,6 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
 
         {/* Video Player Area */}
         <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-          {/* On-screen Rewind -10s and Forward +10s controls */}
-          {!isInstagramFallbackEmbed && (
-            <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none z-20">
-              <button
-                type="button"
-                onClick={() => skipTime(-10)}
-                className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
-                title="Rewind 10 seconds (-10s)"
-              >
-                <RotateCcw className="w-5 h-5 text-[#D4AF37]" />
-                <span className="text-[9px] font-mono font-bold mt-0.5">-10s</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => skipTime(10)}
-                className="p-2.5 rounded-full bg-black/50 hover:bg-black/80 text-white/90 hover:text-white backdrop-blur-xs transition-all pointer-events-auto cursor-pointer hover:scale-110 active:scale-95 flex flex-col items-center border border-white/20 shadow-lg"
-                title="Fast forward 10 seconds (+10s)"
-              >
-                <RotateCw className="w-5 h-5 text-[#D4AF37]" />
-                <span className="text-[9px] font-mono font-bold mt-0.5">+10s</span>
-              </button>
-            </div>
-          )}
-
           {isYouTube ? (
             <iframe
               ref={iframeRef}
@@ -655,9 +680,24 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               autoPlay
               playsInline
               onClick={togglePlay}
+              onTimeUpdate={() => {
+                if (videoRef.current) {
+                  setVideoCurrentTime(videoRef.current.currentTime || 0);
+                }
+              }}
+              onLoadedMetadata={() => {
+                if (videoRef.current) {
+                  setVideoDuration(videoRef.current.duration || 0);
+                }
+              }}
               onError={() => {
-                if (isInstagram && !igStreamFailed) {
-                  setIgStreamFailed(true);
+                if (isInstagram) {
+                  if (igRetryCount < 2) {
+                    setIgRetryCount((c) => c + 1);
+                    setIgRetryNonce(Date.now());
+                  } else if (!igStreamFailed) {
+                    setIgStreamFailed(true);
+                  }
                 }
               }}
               className={`w-full h-full ${
@@ -680,8 +720,80 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             </button>
           )}
 
-          {/* Bottom Information Overlay with Gradient Scrim */}
-          <div className="absolute bottom-0 left-0 right-14 z-20 p-4 pt-14 bg-gradient-to-t from-black/95 via-black/60 to-transparent space-y-1.5 pointer-events-auto">
+          {/* Bottom Information Overlay + Always-Reachable Seek & Prev/Next Reel Controls */}
+          <div className="absolute bottom-0 left-0 right-14 z-20 p-4 pt-12 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-2 pointer-events-auto">
+            {/* Native/Instagram Video Timeline Scrubber */}
+            {!isYouTube && !isInstagramFallbackEmbed && videoDuration > 0 && (
+              <div className="flex items-center gap-2 text-[10px] font-mono text-stone-200">
+                <span className="tabular-nums shrink-0">{formatVideoTime(videoCurrentTime)}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={videoDuration}
+                  step={0.1}
+                  value={Math.min(videoCurrentTime, videoDuration)}
+                  onChange={(e) => {
+                    const nextTime = Number(e.target.value);
+                    setVideoCurrentTime(nextTime);
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = nextTime;
+                    }
+                  }}
+                  aria-label="Seek video timeline"
+                  className="flex-1 h-1.5 accent-[#D4AF37] bg-white/25 rounded-lg cursor-pointer"
+                />
+                <span className="tabular-nums shrink-0">{formatVideoTime(videoDuration)}</span>
+              </div>
+            )}
+
+            {/* Playback & Prev/Next Reel Controls Strip (Visible on Mobile & Desktop) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {canGoPrev && (
+                <button
+                  type="button"
+                  onClick={goToPrevReel}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
+                  title="Pichli Reel (Previous)"
+                >
+                  <ChevronUp className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>Piche</span>
+                </button>
+              )}
+              {canGoNext && (
+                <button
+                  type="button"
+                  onClick={goToNextReel}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
+                  title="Agli Reel (Next)"
+                >
+                  <ChevronDown className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>Aage</span>
+                </button>
+              )}
+              {!isInstagramFallbackEmbed && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => skipTime(-10)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-mono font-bold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
+                    title="Rewind 10 seconds (-10s)"
+                  >
+                    <RotateCcw className="w-3 h-3 text-[#D4AF37]" />
+                    <span>-10s</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => skipTime(10)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-mono font-bold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
+                    title="Forward 10 seconds (+10s)"
+                  >
+                    <RotateCw className="w-3 h-3 text-[#D4AF37]" />
+                    <span>+10s</span>
+                  </button>
+                </>
+              )}
+            </div>
+
             {/* Scholar Link */}
             {currentReel.scholar_name && (
               <div className="flex items-center gap-2">
@@ -727,19 +839,28 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             </p>
           </div>
 
-          {/* RIGHT-SIDE ACTION RAIL (YouTube Shorts style: Views, Like, Comments, Save, Share) */}
-          <div className="absolute right-2.5 bottom-16 z-30 flex flex-col items-center gap-3.5 pointer-events-auto">
-            {/* Views Counter */}
-            <div
-              className="flex flex-col items-center"
-              title={`${(currentReel.views_count ?? 0).toLocaleString()} Views`}
-            >
-              <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 text-[#D4AF37] backdrop-blur-md border border-white/10">
-                <Eye className="w-5 h-5" />
-              </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono">
-                {(currentReel.views_count ?? 0).toLocaleString()}
-              </span>
+          {/* RIGHT-SIDE ACTION RAIL (Instagram-style: Hover or click counts to see User IDs!) */}
+          <div className="absolute right-2.5 bottom-16 z-30 flex flex-col items-center gap-3 pointer-events-auto">
+            {/* Views Counter with Instagram-style Hover/Click User ID List */}
+            <div className="flex flex-col items-center">
+              <StatActivityButton
+                itemType="reel"
+                itemId={currentReel.id}
+                itemTitle={currentReel.title}
+                tab="views"
+                count={currentReel.views_count ?? 0}
+                darkSurface={true}
+                popoverAlign="right"
+                popoverDirection="up"
+                onOpenModal={(tab) => setActivityModalTab(tab)}
+                className="flex-col gap-1"
+                countClassName="text-[11px] font-bold text-white drop-shadow-sm font-mono"
+                icon={
+                  <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 hover:bg-black/75 text-[#D4AF37] backdrop-blur-md border border-white/15 transition-all hover:scale-105">
+                    <Eye className="w-5 h-5" />
+                  </div>
+                }
+              />
             </div>
 
             {/* Scholar Avatar Circle if available */}
@@ -766,25 +887,38 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </button>
             )}
 
-            {/* LIKE BUTTON */}
-            <button
-              onClick={handleLike}
-              className="flex flex-col items-center group cursor-pointer focus:outline-none"
-              title={hasLiked ? 'Unlike' : 'Like'}
-            >
-              <div
-                className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
-                  hasLiked
-                    ? 'bg-rose-600/90 text-white scale-110 shadow-lg shadow-rose-600/40'
-                    : 'bg-black/50 text-white hover:bg-black/70 hover:scale-105'
-                }`}
+            {/* LIKE BUTTON (Heart toggles like; Hover/click number opens Likers IDs) */}
+            <div className="flex flex-col items-center">
+              <button
+                onClick={handleLike}
+                className="flex flex-col items-center group cursor-pointer focus:outline-none"
+                title={hasLiked ? 'Unlike' : 'Like'}
               >
-                <Heart className={`w-5 h-5 ${hasLiked ? 'fill-white text-white' : 'text-white'}`} />
-              </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
-                {likesCount.toLocaleString()}
-              </span>
-            </button>
+                <div
+                  className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
+                    hasLiked
+                      ? 'bg-rose-600/90 text-white scale-110 shadow-lg shadow-rose-600/40'
+                      : 'bg-black/50 text-white hover:bg-black/70 hover:scale-105'
+                  }`}
+                >
+                  <Heart className={`w-5 h-5 ${hasLiked ? 'fill-white text-white' : 'text-white'}`} />
+                </div>
+              </button>
+              <StatActivityButton
+                itemType="reel"
+                itemId={currentReel.id}
+                itemTitle={currentReel.title}
+                tab="likes"
+                count={likesCount}
+                darkSurface={true}
+                popoverAlign="right"
+                popoverDirection="up"
+                onOpenModal={(tab) => setActivityModalTab(tab)}
+                className="mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                countClassName="text-[11px] font-bold text-white drop-shadow-sm font-mono underline decoration-white/30 underline-offset-2"
+                icon={<span className="sr-only">Likes</span>}
+              />
+            </div>
 
             {/* COMMENT BUTTON */}
             <button
@@ -806,39 +940,65 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               </span>
             </button>
 
-            {/* SAVE (BOOKMARK) BUTTON */}
-            <button
-              onClick={handleSave}
-              className="flex flex-col items-center group cursor-pointer focus:outline-none"
-              title={isSaved ? `Saved (${savesCount.toLocaleString()} total saves)` : `Save (${savesCount.toLocaleString()} total saves)`}
-            >
-              <div
-                className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
-                  isSaved
-                    ? 'bg-[#D4AF37] text-stone-950 scale-110 shadow-lg shadow-[#D4AF37]/30'
-                    : 'bg-black/50 text-white hover:bg-black/70 hover:scale-105'
-                }`}
+            {/* SAVE (BOOKMARK) BUTTON + Hover/Click Saves IDs */}
+            <div className="flex flex-col items-center">
+              <button
+                onClick={handleSave}
+                className="flex flex-col items-center group cursor-pointer focus:outline-none"
+                title={isSaved ? 'Saved' : 'Save Reel'}
               >
-                <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-stone-950 text-stone-950' : 'text-white'}`} />
-              </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
-                {savesCount.toLocaleString()}
-              </span>
-            </button>
+                <div
+                  className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all ${
+                    isSaved
+                      ? 'bg-[#D4AF37] text-stone-950 scale-110 shadow-lg shadow-[#D4AF37]/30'
+                      : 'bg-black/50 text-white hover:bg-black/70 hover:scale-105'
+                  }`}
+                >
+                  <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-stone-950 text-stone-950' : 'text-white'}`} />
+                </div>
+              </button>
+              <StatActivityButton
+                itemType="reel"
+                itemId={currentReel.id}
+                itemTitle={currentReel.title}
+                tab="saves"
+                count={savesCount}
+                darkSurface={true}
+                popoverAlign="right"
+                popoverDirection="up"
+                onOpenModal={(tab) => setActivityModalTab(tab)}
+                className="mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                countClassName="text-[11px] font-bold text-white drop-shadow-sm font-mono"
+                icon={<span className="sr-only">Saves</span>}
+              />
+            </div>
 
-            {/* SHARE BUTTON */}
-            <button
-              onClick={() => setIsShareOpen(true)}
-              className="flex flex-col items-center group cursor-pointer focus:outline-none"
-              title={`Share Reel (${sharesCount.toLocaleString()} shares)`}
-            >
-              <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 text-white hover:bg-black/70 hover:scale-105 backdrop-blur-md transition-all">
-                <Share2 className="w-5 h-5" />
-              </div>
-              <span className="text-[11px] font-bold mt-1 text-white drop-shadow-sm font-mono tabular-nums">
-                {sharesCount.toLocaleString()}
-              </span>
-            </button>
+            {/* SHARE BUTTON + Hover/Click Shares IDs */}
+            <div className="flex flex-col items-center">
+              <button
+                onClick={() => setIsShareOpen(true)}
+                className="flex flex-col items-center group cursor-pointer focus:outline-none"
+                title="Share Reel"
+              >
+                <div className="w-11 h-11 rounded-full flex items-center justify-center bg-black/50 text-white hover:bg-black/70 hover:scale-105 backdrop-blur-md transition-all">
+                  <Share2 className="w-5 h-5" />
+                </div>
+              </button>
+              <StatActivityButton
+                itemType="reel"
+                itemId={currentReel.id}
+                itemTitle={currentReel.title}
+                tab="shares"
+                count={sharesCount}
+                darkSurface={true}
+                popoverAlign="right"
+                popoverDirection="up"
+                onOpenModal={(tab) => setActivityModalTab(tab)}
+                className="mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                countClassName="text-[11px] font-bold text-white drop-shadow-sm font-mono"
+                icon={<span className="sr-only">Shares</span>}
+              />
+            </div>
           </div>
         </div>
 
@@ -867,22 +1027,32 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             }}
           />
         )}
+      </div>
 
-        {/* Up / Down navigation floating arrows (visible on desktop) */}
+      {/* Desktop Prev / Next Reel Arrows placed cleanly OUTSIDE containerRef so overflow-hidden never clips them */}
+      <div className="hidden sm:flex flex-col gap-3 ml-3 z-40">
         {canGoPrev && (
           <button
-            onClick={goToPrevReel}
-            className="hidden sm:flex absolute -left-12 top-[45%] -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white items-center justify-center transition-all cursor-pointer shadow-lg"
-            title="Previous Reel (or scroll up)"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              goToPrevReel();
+            }}
+            className="w-11 h-11 rounded-full bg-white/15 hover:bg-[#D4AF37] hover:text-stone-950 text-white flex items-center justify-center transition-all cursor-pointer shadow-xl border border-white/20 backdrop-blur-md"
+            title="Pichli Reel (Previous Reel)"
           >
             <ChevronUp className="w-6 h-6" />
           </button>
         )}
         {canGoNext && (
           <button
-            onClick={goToNextReel}
-            className="hidden sm:flex absolute -left-12 top-[55%] -translate-y-1/2 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white items-center justify-center transition-all cursor-pointer shadow-lg"
-            title="Next Reel (or scroll down)"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              goToNextReel();
+            }}
+            className="w-11 h-11 rounded-full bg-white/15 hover:bg-[#D4AF37] hover:text-stone-950 text-white flex items-center justify-center transition-all cursor-pointer shadow-xl border border-white/20 backdrop-blur-md"
+            title="Agli Reel (Next Reel)"
           >
             <ChevronDown className="w-6 h-6" />
           </button>
@@ -896,6 +1066,16 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
         title={currentReel.title}
         category="Islamic Reel"
         onShare={handleShareRecorded}
+      />
+
+      {/* Instagram-style Views / Likes / Shares / Saves ID List Modal */}
+      <EngagementActivityModal
+        isOpen={!!activityModalTab}
+        onClose={() => setActivityModalTab(null)}
+        itemType="reel"
+        itemId={currentReel.id}
+        itemTitle={currentReel.title}
+        initialTab={activityModalTab || 'views'}
       />
     </div>
   );

@@ -23,14 +23,15 @@ import {
   Plus
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Book } from '../types';
 import { api } from '../services/api';
 import { useUserAuth } from '../context/UserAuthContext';
 import { ShareModal } from './ShareModal';
 
-// Configure PDF.js worker using matching cdnjs build
+// Configure PDF.js worker using local Vite-bundled worker (avoids cross-origin Worker blocks)
 if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '4.10.38'}/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 }
 
 export type HighlightColor = 'gold' | 'emerald' | 'blue' | 'rose';
@@ -137,6 +138,7 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
   const [jumpPageInput, setJumpPageInput] = useState<string>('1');
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [useNativeIframeFallback, setUseNativeIframeFallback] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pageWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -145,27 +147,58 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
 
   const pdfUrl = book?.file_url || book?.external_read_url;
 
-  // Load PDF Document via PDF.js directly inside website
+  // Load PDF Document via PDF.js directly inside website (with worker-free & inline iframe fallbacks)
   useEffect(() => {
     if (!book || !pdfUrl) {
       setIsLoadingPdf(false);
       setPdfDoc(null);
       setNumPages(0);
+      setUseNativeIframeFallback(false);
       return;
     }
 
     let isMounted = true;
     setIsLoadingPdf(true);
     setPdfError(null);
+    setPdfDoc(null);
+    setNumPages(0);
+    setUseNativeIframeFallback(false);
     setCurrentPage(1);
     setJumpPageInput('1');
 
     let loadingTask: any = null;
+
+    const handleFinalFailure = async (err: any) => {
+      if (!isMounted) return;
+      console.warn('PDF.js loading warning:', err);
+
+      // Check if local/same-origin uploaded file actually returns 404 (missing on disk)
+      if (pdfUrl.startsWith('/')) {
+        try {
+          const headRes = await fetch(pdfUrl, { method: 'HEAD' });
+          if (headRes.status === 404) {
+            if (!isMounted) return;
+            setPdfError(
+              'Yeh PDF file server par maujood nahi hai (404). Admin Portal se is kitab ki PDF dubara upload karein.'
+            );
+            setIsLoadingPdf(false);
+            return;
+          }
+        } catch {
+          // Proceed to inline iframe reader fallback
+        }
+      }
+
+      if (!isMounted) return;
+      // Fallback to browser's native inline PDF reader inside the modal instead of showing only a Download error
+      setUseNativeIframeFallback(true);
+      setIsLoadingPdf(false);
+    };
+
     try {
       loadingTask = pdfjsLib.getDocument({
         url: pdfUrl,
-        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',
-        cMapPacked: true
+        withCredentials: false
       });
 
       loadingTask.promise
@@ -175,16 +208,29 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
           setNumPages(loadedDoc.numPages);
           setIsLoadingPdf(false);
         })
-        .catch((err: any) => {
+        .catch(() => {
           if (!isMounted) return;
-          console.warn('PDF.js loading warning:', err);
-          setPdfError('Unable to render PDF directly in this browser. You can download the book file below to read on your device.');
-          setIsLoadingPdf(false);
+          // Stage 2 retry without web worker (in case strict CSP/worker blocks worker execution)
+          try {
+            const fallbackTask = (pdfjsLib.getDocument as any)({
+              url: pdfUrl,
+              disableWorker: true
+            });
+            loadingTask = fallbackTask;
+            fallbackTask.promise
+              .then((loadedDoc: any) => {
+                if (!isMounted) return;
+                setPdfDoc(loadedDoc);
+                setNumPages(loadedDoc.numPages);
+                setIsLoadingPdf(false);
+              })
+              .catch(handleFinalFailure);
+          } catch (retryErr) {
+            handleFinalFailure(retryErr);
+          }
         });
     } catch (err) {
-      console.warn('PDF.js task creation error:', err);
-      setPdfError('Unable to render PDF directly in this browser. You can download the book file below to read on your device.');
-      setIsLoadingPdf(false);
+      handleFinalFailure(err);
     }
 
     return () => {
@@ -727,6 +773,27 @@ export const BookReaderModal: React.FC<BookReaderModalProps> = ({ book, onClose 
                 <p className="text-xs text-stone-400">
                   Loading digital manuscript directly in reader... please wait
                 </p>
+              </div>
+            ) : useNativeIframeFallback && pdfUrl ? (
+              <div className="w-full h-full flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-stone-900/90 border border-white/10 text-[11px] text-stone-300 shrink-0">
+                  <span>In-Website Built-in PDF Viewer (Direct Mode)</span>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#D4AF37] font-semibold hover:underline"
+                    >
+                      Open Full Tab ↗
+                    </a>
+                  </div>
+                </div>
+                <iframe
+                  src={`${pdfUrl}#toolbar=1&navpanes=0&view=FitH`}
+                  title={book.title}
+                  className="w-full flex-1 min-h-[70vh] bg-white rounded-lg border border-white/15 shadow-2xl"
+                />
               </div>
             ) : pdfError ? (
               <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-md space-y-4">

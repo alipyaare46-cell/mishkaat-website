@@ -5,6 +5,7 @@ import madinahHeroImg from '../assets/images/madinah_munawwarah_hero_17931896675
 import { useLanguage } from '../context/LanguageContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { resolveMediaThumbnail, isVideoMedia, getInstagramThumbUrl } from '../utils/media';
+import { StatActivityButton } from '../components/EngagementActivityModal';
 
 interface HomePageProps {
   settings: WebsiteSettings | null;
@@ -137,16 +138,40 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
-                { label: t.totalSpeeches, count: stats?.published.speeches ?? 0, icon: Volume2, route: 'speeches' },
-                { label: t.totalReels, count: stats?.published.reels ?? 0, icon: Film, route: 'reels' },
-                { label: t.totalBooks, count: stats?.published.books ?? 0, icon: BookOpen, route: 'books' },
-                { label: t.totalArticles, count: stats?.published.articles ?? 0, icon: FileText, route: 'articles' },
-                { label: t.totalAqwaal, count: stats?.published.aqwaal ?? 0, icon: Quote, route: 'aqwaal' },
-                { label: t.totalShayariyan, count: stats?.published.shayariyan ?? 0, icon: Feather, route: 'shayariyan' },
-                { label: t.totalScholars, count: stats?.published.scholars ?? 0, icon: Users, route: 'speeches' },
-                { label: t.websiteViews, count: stats?.websiteViews ?? 0, icon: Eye, route: 'home' },
+                { label: t.totalSpeeches, count: stats?.published.speeches ?? 0, icon: Volume2, route: 'speeches', isWebsiteViews: false },
+                { label: t.totalReels, count: stats?.published.reels ?? 0, icon: Film, route: 'reels', isWebsiteViews: false },
+                { label: t.totalBooks, count: stats?.published.books ?? 0, icon: BookOpen, route: 'books', isWebsiteViews: false },
+                { label: t.totalArticles, count: stats?.published.articles ?? 0, icon: FileText, route: 'articles', isWebsiteViews: false },
+                { label: t.totalAqwaal, count: stats?.published.aqwaal ?? 0, icon: Quote, route: 'aqwaal', isWebsiteViews: false },
+                { label: t.totalShayariyan, count: stats?.published.shayariyan ?? 0, icon: Feather, route: 'shayariyan', isWebsiteViews: false },
+                { label: t.totalScholars, count: stats?.published.scholars ?? 0, icon: Users, route: 'speeches', isWebsiteViews: false },
+                { label: t.websiteViews, count: stats?.websiteViews ?? 0, icon: Eye, route: 'home', isWebsiteViews: true },
               ].map((item, idx) => {
                 const Icon = item.icon;
+                if (item.isWebsiteViews) {
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-lg bg-stone-50 hover:bg-[#F4F8F4] border border-stone-200/60 hover:border-[#D4AF37]/40 transition-all text-left group relative"
+                    >
+                      <StatActivityButton
+                        itemType="website"
+                        itemId="site"
+                        itemTitle="Mishkaat Website Visitors"
+                        tab="views"
+                        count={Number(item.count)}
+                        popoverAlign="right"
+                        popoverDirection="up"
+                        className="flex-col items-start w-full gap-1"
+                        countClassName="text-xl sm:text-2xl font-bold font-mono text-stone-900"
+                        icon={<Icon className="w-4 h-4 text-[#064E3B] mb-0.5 group-hover:scale-110 transition-transform" />}
+                      />
+                      <div className="text-[11px] text-stone-500 font-medium truncate mt-0.5">
+                        {item.label}
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={idx}
@@ -290,9 +315,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div
                     key={speech.id}
                     onClick={() => onPlaySpeech(speech)}
-                    className="bg-white rounded-xl border border-stone-200/80 overflow-hidden hover:shadow-lg hover:border-[#D4AF37]/50 transition-all flex flex-col justify-between group cursor-pointer"
+                    className="bg-white rounded-xl border border-stone-200/80 hover:shadow-lg hover:border-[#D4AF37]/50 hover:z-20 relative transition-all flex flex-col justify-between group cursor-pointer"
                   >
-                    <div className="relative aspect-video bg-stone-900 flex items-center justify-center overflow-hidden">
+                    <div className="relative aspect-video bg-stone-900 rounded-t-xl flex items-center justify-center overflow-hidden">
                       <img
                         src={thumbUrl}
                         alt={speech.title}
@@ -345,22 +370,43 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                     <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
                       <div className="flex items-center gap-3 font-mono text-[10px] text-stone-500">
-                        <span className="inline-flex items-center gap-1" title="Views">
-                          <Eye className="w-3 h-3 text-[#064E3B]" />
-                          <span>{(speech.views_count ?? 0).toLocaleString()}</span>
-                        </span>
-                        <span className="inline-flex items-center gap-1" title="Likes">
-                          <Heart className="w-3 h-3 text-rose-500" />
-                          <span>{(speech.likes_count ?? 0).toLocaleString()}</span>
-                        </span>
+                        <StatActivityButton
+                          itemType="speech"
+                          itemId={speech.id}
+                          itemTitle={speech.title}
+                          tab="views"
+                          count={speech.views_count ?? 0}
+                          popoverAlign="left"
+                          popoverDirection="up"
+                          className="hover:text-[#064E3B]"
+                          icon={<Eye className="w-3 h-3 text-[#064E3B]" />}
+                        />
+                        <StatActivityButton
+                          itemType="speech"
+                          itemId={speech.id}
+                          itemTitle={speech.title}
+                          tab="likes"
+                          count={speech.likes_count ?? 0}
+                          popoverAlign="left"
+                          popoverDirection="up"
+                          className="hover:text-rose-600"
+                          icon={<Heart className="w-3 h-3 text-rose-500" />}
+                        />
                         <span className="inline-flex items-center gap-1" title="Comments">
                           <MessageSquare className="w-3 h-3 text-emerald-700" />
                           <span>{(speech.comments_count ?? 0).toLocaleString()}</span>
                         </span>
-                        <span className="inline-flex items-center gap-1" title="Shares">
-                          <Share2 className="w-3 h-3 text-sky-600" />
-                          <span>{(speech.shares_count ?? 0).toLocaleString()}</span>
-                        </span>
+                        <StatActivityButton
+                          itemType="speech"
+                          itemId={speech.id}
+                          itemTitle={speech.title}
+                          tab="shares"
+                          count={speech.shares_count ?? 0}
+                          popoverAlign="left"
+                          popoverDirection="up"
+                          className="hover:text-sky-700"
+                          icon={<Share2 className="w-3 h-3 text-sky-600" />}
+                        />
                       </div>
                       <span className="flex items-center gap-1 shrink-0">
                         <Calendar className="w-3 h-3" />
@@ -416,26 +462,28 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div
                     key={reel.id}
                     onClick={() => onPlayReel(reel)}
-                    className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-white/10 shadow-lg"
+                    className="relative aspect-9/16 bg-stone-900 rounded-xl cursor-pointer group border border-white/10 hover:z-30 shadow-lg"
                   >
-                    {cardThumb ? (
-                      <img
-                        src={cardThumb}
-                        alt={reel.title}
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                        }}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-[#064E3B]/70 flex items-center justify-center">
-                        <Film className="w-10 h-10 text-white/40" />
-                      </div>
-                    )}
+                    <div className="absolute inset-0 rounded-xl overflow-hidden">
+                      {cardThumb ? (
+                        <img
+                          src={cardThumb}
+                          alt={reel.title}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#064E3B]/70 flex items-center justify-center">
+                          <Film className="w-10 h-10 text-white/40" />
+                        </div>
+                      )}
+                    </div>
 
                     {/* Gradient scrim */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-between p-3.5">
+                    <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-between p-3.5">
                       <div className="flex items-center justify-between">
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleBookmark('reel', reel.id); }}
@@ -461,22 +509,46 @@ export const HomePage: React.FC<HomePageProps> = ({
                           {reel.title}
                         </h4>
                         <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-stone-200 font-mono pt-1">
-                          <span className="inline-flex items-center gap-1" title="Views">
-                            <Eye className="w-3 h-3 text-[#D4AF37]" />
-                            <span>{(reel.views_count ?? 0).toLocaleString()}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1" title="Likes">
-                            <Heart className="w-3 h-3 text-rose-400" />
-                            <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="views"
+                            count={reel.views_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-[#D4AF37]"
+                            icon={<Eye className="w-3 h-3 text-[#D4AF37]" />}
+                          />
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="likes"
+                            count={reel.likes_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-rose-300"
+                            icon={<Heart className="w-3 h-3 text-rose-400" />}
+                          />
                           <span className="inline-flex items-center gap-1" title="Comments">
                             <MessageSquare className="w-3 h-3 text-emerald-300" />
                             <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
                           </span>
-                          <span className="inline-flex items-center gap-1" title="Shares">
-                            <Share2 className="w-3 h-3 text-sky-300" />
-                            <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="shares"
+                            count={reel.shares_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="right"
+                            popoverDirection="up"
+                            className="hover:text-sky-200"
+                            icon={<Share2 className="w-3 h-3 text-sky-300" />}
+                          />
                         </div>
                       </div>
                     </div>

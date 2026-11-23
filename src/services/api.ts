@@ -17,7 +17,8 @@ import {
   CommentItem,
   InteractionsData,
   ContactMessage,
-  ViewersResponse
+  ViewersResponse,
+  ItemActivityResponse
 } from '../types';
 
 
@@ -543,6 +544,8 @@ export const api = {
   // Social Interactions (Likes, Shares, Saves & Comments for Videos & Reels)
   getInteractions: (itemType: string, itemId: string) =>
     userRequest<InteractionsData>(`/interactions/${itemType}/${itemId}`),
+  getInteractionActivity: (itemType: string, itemId: string) =>
+    userRequest<ItemActivityResponse>(`/interactions/${itemType}/${itemId}/activity`),
   toggleLike: (itemType: string, itemId: string) =>
     userRequest<{ liked: boolean; likes_count: number }>('/interactions/like', {
       method: 'POST',

@@ -1129,6 +1129,253 @@ apiRouter.get('/interactions/:item_type/:item_id', (req, res) => {
   });
 });
 
+function formatHandleFromEmail(email: string | null | undefined, fallbackName: string | null | undefined): string {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (cleanEmail.includes('@')) {
+    const local = cleanEmail.split('@')[0].trim();
+    if (local) return `@${local}`;
+  }
+  const cleanName = (fallbackName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return cleanName ? `@${cleanName.slice(0, 20)}` : '@member';
+}
+
+apiRouter.get('/interactions/:item_type/:item_id/activity', (req, res) => {
+  const { item_type, item_id } = req.params;
+  const cleanType = String(item_type || '').trim();
+  const cleanId = String(item_id || '').trim();
+
+  if (!cleanType || !cleanId) {
+    res.status(400).json({ error: 'item_type and item_id are required' });
+    return;
+  }
+
+  const caller = resolveOptionalViewer(req);
+  const isAdminCaller = caller.viewer_type === 'admin';
+
+  const mapPerson = (opts: {
+    id: string;
+    user_id: string | null;
+    member_name: string | null;
+    member_email: string | null;
+    admin_name: string | null;
+    admin_username: string | null;
+    fallback_name?: string | null;
+    fallback_email?: string | null;
+    device_info?: string | null;
+    platform?: string | null;
+    created_at: string;
+  }) => {
+    const isAdminUser = !opts.member_name && Boolean(opts.admin_name || opts.admin_username);
+    const isMemberUser = Boolean(opts.member_name || opts.member_email);
+    const fullName =
+      opts.member_name ||
+      (opts.admin_name ? `${opts.admin_name} (Admin)` : null) ||
+      opts.fallback_name ||
+      'Guest Visitor';
+    const rawEmail =
+      opts.member_email ||
+      (opts.admin_username ? `${opts.admin_username}@mishkaat.admin` : null) ||
+      opts.fallback_email ||
+      null;
+
+    const handle = isAdminUser
+      ? `@${opts.admin_username || 'admin'}`
+      : isMemberUser
+        ? formatHandleFromEmail(rawEmail, fullName)
+        : opts.device_info
+          ? opts.device_info
+          : 'Guest Visitor';
+
+    return {
+      id: opts.id,
+      user_id: opts.user_id,
+      name: fullName,
+      handle,
+      email: isAdminCaller ? rawEmail : null,
+      viewer_type: isAdminUser ? 'admin' : isMemberUser ? 'member' : 'guest',
+      device_info: opts.device_info || null,
+      platform: opts.platform || null,
+      created_at: opts.created_at
+    };
+  };
+
+  // 1. Unique Viewers list (merged with view_logs for guest device metadata)
+  const targetIdMatch = cleanType === 'website' ? 'site' : cleanId;
+  const uniqueViewRows = db.prepare(`
+    SELECT uv.id, uv.viewer_key, uv.user_id, uv.created_at,
+      u.full_name as member_name, u.email as member_email,
+      a.full_name as admin_name, a.username as admin_username
+    FROM unique_views uv
+    LEFT JOIN users u ON uv.user_id = u.id
+    LEFT JOIN admins a ON uv.user_id = a.id
+    WHERE uv.target_type = ? AND uv.target_id = ?
+    ORDER BY uv.created_at DESC
+    LIMIT 150
+  `).all(cleanType, targetIdMatch) as any[];
+
+  const logRows = db.prepare(`
+    SELECT user_id, viewer_name, viewer_email, viewer_type, device_info, created_at
+    FROM view_logs
+    WHERE target_type = ? AND COALESCE(target_id, 'site') = ?
+    ORDER BY created_at DESC
+    LIMIT 250
+  `).all(cleanType, targetIdMatch) as any[];
+
+  const logByUserId = new Map<string, any>();
+  const guestLogs: any[] = [];
+  for (const l of logRows) {
+    if (l.user_id) {
+      if (!logByUserId.has(l.user_id)) logByUserId.set(l.user_id, l);
+    } else {
+      guestLogs.push(l);
+    }
+  }
+
+  let guestLogIdx = 0;
+  const views = uniqueViewRows.map((uv) => {
+    const matchedLog = uv.user_id ? logByUserId.get(uv.user_id) : guestLogs[guestLogIdx++];
+    return mapPerson({
+      id: uv.id,
+      user_id: uv.user_id || null,
+      member_name: uv.member_name,
+      member_email: uv.member_email,
+      admin_name: uv.admin_name,
+      admin_username: uv.admin_username,
+      fallback_name: matchedLog?.viewer_name || null,
+      fallback_email: matchedLog?.viewer_email || null,
+      device_info: matchedLog?.device_info || null,
+      created_at: matchedLog?.created_at || uv.created_at
+    });
+  });
+
+  // Also include any view_logs entries if unique_views was empty (legacy view logs)
+  if (views.length === 0 && logRows.length > 0) {
+    const seenKeys = new Set<string>();
+    for (let i = 0; i < logRows.length; i++) {
+      const l = logRows[i];
+      const dedupeKey = l.user_id ? `u:${l.user_id}` : `g:${l.device_info || ''}:${i}`;
+      if (seenKeys.has(dedupeKey)) continue;
+      seenKeys.add(dedupeKey);
+      views.push(
+        mapPerson({
+          id: `vl_${i}`,
+          user_id: l.user_id || null,
+          member_name: l.viewer_type === 'member' ? l.viewer_name : null,
+          member_email: l.viewer_type === 'member' ? l.viewer_email : null,
+          admin_name: l.viewer_type === 'admin' ? l.viewer_name : null,
+          admin_username: l.viewer_type === 'admin' && l.viewer_email ? String(l.viewer_email).split('@')[0] : null,
+          fallback_name: l.viewer_name,
+          fallback_email: l.viewer_email,
+          device_info: l.device_info,
+          created_at: l.created_at
+        })
+      );
+    }
+  }
+
+  // 2. Likes list
+  const likeRows = db.prepare(`
+    SELECT l.id, l.user_id, l.created_at,
+      u.full_name as member_name, u.email as member_email,
+      a.full_name as admin_name, a.username as admin_username
+    FROM likes l
+    LEFT JOIN users u ON l.user_id = u.id
+    LEFT JOIN admins a ON l.user_id = a.id
+    WHERE l.item_type = ? AND l.item_id = ?
+    ORDER BY l.created_at DESC
+    LIMIT 150
+  `).all(cleanType, cleanId) as any[];
+
+  const likes = likeRows.map((l) =>
+    mapPerson({
+      id: l.id,
+      user_id: l.user_id || null,
+      member_name: l.member_name,
+      member_email: l.member_email,
+      admin_name: l.admin_name,
+      admin_username: l.admin_username,
+      created_at: l.created_at
+    })
+  );
+
+  // 3. Shares list
+  const shareRows = db.prepare(`
+    SELECT s.id, s.user_id, s.platform, s.created_at,
+      u.full_name as member_name, u.email as member_email,
+      a.full_name as admin_name, a.username as admin_username
+    FROM shares s
+    LEFT JOIN users u ON s.user_id = u.id
+    LEFT JOIN admins a ON s.user_id = a.id
+    WHERE s.item_type = ? AND s.item_id = ?
+    ORDER BY s.created_at DESC
+    LIMIT 150
+  `).all(cleanType, cleanId) as any[];
+
+  const shares = shareRows.map((s) =>
+    mapPerson({
+      id: s.id,
+      user_id: s.user_id || null,
+      member_name: s.member_name,
+      member_email: s.member_email,
+      admin_name: s.admin_name,
+      admin_username: s.admin_username,
+      platform: s.platform || 'link',
+      created_at: s.created_at
+    })
+  );
+
+  // 4. Saves / Bookmarks list
+  const saveRows = db.prepare(`
+    SELECT ub.id, ub.user_id, ub.created_at,
+      u.full_name as member_name, u.email as member_email,
+      a.full_name as admin_name, a.username as admin_username
+    FROM user_bookmarks ub
+    LEFT JOIN users u ON ub.user_id = u.id
+    LEFT JOIN admins a ON ub.user_id = a.id
+    WHERE ub.item_type = ? AND ub.item_id = ?
+    ORDER BY ub.created_at DESC
+    LIMIT 150
+  `).all(cleanType, cleanId) as any[];
+
+  const saves = saveRows.map((ub) =>
+    mapPerson({
+      id: ub.id,
+      user_id: ub.user_id || null,
+      member_name: ub.member_name,
+      member_email: ub.member_email,
+      admin_name: ub.admin_name,
+      admin_username: ub.admin_username,
+      created_at: ub.created_at
+    })
+  );
+
+  // Authoritative counts
+  let totalViews = views.length;
+  if (cleanType === 'reel') {
+    const r = db.prepare('SELECT COALESCE(views_count, 0) as v FROM reels WHERE id = ?').get(cleanId) as { v: number } | undefined;
+    if (r) totalViews = Math.max(totalViews, Number(r.v || 0));
+  } else if (cleanType === 'speech') {
+    const s = db.prepare('SELECT COALESCE(views_count, 0) as v FROM speeches WHERE id = ?').get(cleanId) as { v: number } | undefined;
+    if (s) totalViews = Math.max(totalViews, Number(s.v || 0));
+  } else if (cleanType === 'website') {
+    const w = db.prepare("SELECT value FROM website_settings WHERE key = 'site_views'").get() as { value: string } | undefined;
+    if (w) totalViews = Math.max(totalViews, Number(w.value || 0));
+  }
+
+  res.json({
+    views,
+    likes,
+    shares,
+    saves,
+    counts: {
+      views: totalViews,
+      likes: likes.length,
+      shares: shares.length,
+      saves: saves.length
+    }
+  });
+});
+
 apiRouter.post('/interactions/like', requireUser, (req, res) => {
   const sessionUser = (req as any).user;
   const { item_type, item_id } = req.body;
@@ -1377,13 +1624,15 @@ apiRouter.post('/upload-chunk-complete', requireAdmin, async (req: Request, res:
 // -------------------------------------------------------------
 apiRouter.get('/instagram/resolve', async (req: Request, res: Response) => {
   const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  const forceRefresh = req.query.refresh === '1';
   if (!rawUrl) {
     res.status(400).json({ error: 'Instagram URL is required', playable: false });
     return;
   }
 
   try {
-    const resolved = await resolveInstagramMedia(rawUrl);
+    if (forceRefresh) invalidateInstagramCache(rawUrl);
+    const resolved = await resolveInstagramMedia(rawUrl, forceRefresh);
     if (!resolved) {
       res.json({ playable: false, streamUrl: null, thumbUrl: null, embedUrl: null });
       return;
@@ -1404,6 +1653,7 @@ apiRouter.get('/instagram/resolve', async (req: Request, res: Response) => {
 
 apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
   const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+  const forceRefresh = req.query.refresh === '1';
   if (!rawUrl) {
     res.status(400).json({ error: 'Instagram URL is required' });
     return;
@@ -1417,13 +1667,20 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
   });
 
   try {
-    let resolved = await resolveInstagramMedia(rawUrl);
+    if (forceRefresh) {
+      invalidateInstagramCache(rawUrl);
+    }
+    let resolved = await resolveInstagramMedia(rawUrl, forceRefresh);
+    if (!resolved?.videoUrl) {
+      // Retry once with forceRefresh if initial lookup missed
+      resolved = await resolveInstagramMedia(rawUrl, true);
+    }
     if (!resolved?.videoUrl) {
       res.status(404).json({ error: 'Direct video stream unavailable for this Instagram URL' });
       return;
     }
 
-    const fetchUpstream = async (targetUrl: string) => {
+    const fetchUpstream = async (targetUrl: string, includeRange = true) => {
       const headers: Record<string, string> = {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -1432,7 +1689,7 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
       if (/instagram\.com|cdninstagram\.com|fbcdn\.net/i.test(targetUrl)) {
         headers['Referer'] = 'https://www.instagram.com/';
       }
-      if (req.headers.range) {
+      if (includeRange && req.headers.range) {
         headers['Range'] = req.headers.range;
       }
       return fetch(targetUrl, {
@@ -1443,19 +1700,44 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
       });
     };
 
-    let upstream = await fetchUpstream(resolved.videoUrl);
+    let upstream: globalThis.Response | null = null;
+    try {
+      upstream = await fetchUpstream(resolved.videoUrl, true);
+    } catch {
+      upstream = null;
+    }
 
-    // If cached CDN URL expired (403/410), refresh once automatically
-    if (upstream.status === 403 || upstream.status === 410) {
-      invalidateInstagramCache(rawUrl);
-      resolved = await resolveInstagramMedia(rawUrl, true);
-      if (resolved?.videoUrl) {
-        upstream = await fetchUpstream(resolved.videoUrl);
+    // If cached CDN URL failed or rejected (400/401/403/404/410/416/5xx or network error), refresh and retry
+    if (!upstream || (!upstream.ok && upstream.status !== 206)) {
+      if (upstream && upstream.status === 416) {
+        try {
+          upstream = await fetchUpstream(resolved.videoUrl, false);
+        } catch {
+          upstream = null;
+        }
+      }
+      if (!upstream || (!upstream.ok && upstream.status !== 206)) {
+        invalidateInstagramCache(rawUrl);
+        resolved = await resolveInstagramMedia(rawUrl, true);
+        if (resolved?.videoUrl) {
+          try {
+            upstream = await fetchUpstream(resolved.videoUrl, true);
+          } catch {
+            upstream = null;
+          }
+          if (upstream && upstream.status === 416) {
+            try {
+              upstream = await fetchUpstream(resolved.videoUrl, false);
+            } catch {
+              upstream = null;
+            }
+          }
+        }
       }
     }
 
-    if (!upstream.ok && upstream.status !== 206) {
-      res.status(502).json({ error: `Upstream video server returned ${upstream.status}` });
+    if (!upstream || (!upstream.ok && upstream.status !== 206)) {
+      res.status(502).json({ error: `Upstream video server returned ${upstream?.status ?? 'error'}` });
       return;
     }
 
@@ -1463,7 +1745,8 @@ apiRouter.get('/instagram/stream', async (req: Request, res: Response) => {
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'video/mp4');
     res.setHeader('Accept-Ranges', upstream.headers.get('accept-ranges') || 'bytes');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Cache-Control', 'public, max-age=1800');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
 
     const contentLength = upstream.headers.get('content-length');
     if (contentLength) res.setHeader('Content-Length', contentLength);

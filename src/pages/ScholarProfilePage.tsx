@@ -4,6 +4,7 @@ import { Scholar, Speech, Reel } from '../types';
 import { api } from '../services/api';
 import { useLanguage } from '../context/LanguageContext';
 import { getInstagramThumbUrl } from '../utils/media';
+import { StatActivityButton } from '../components/EngagementActivityModal';
 
 interface ScholarProfilePageProps {
   slug: string;
@@ -198,9 +199,9 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                   <div
                     key={sp.id}
                     onClick={() => onPlaySpeech(sp)}
-                    className="bg-white rounded-xl border border-stone-200/80 overflow-hidden hover:shadow-md transition-all flex flex-col justify-between group cursor-pointer"
+                    className="bg-white rounded-xl border border-stone-200/80 hover:shadow-md hover:z-20 relative transition-all flex flex-col justify-between group cursor-pointer"
                   >
-                    <div className="relative aspect-video bg-stone-900 flex items-center justify-center overflow-hidden">
+                    <div className="relative aspect-video bg-stone-900 rounded-t-xl flex items-center justify-center overflow-hidden">
                       {sp.thumbnail ? (
                         <img
                           src={sp.thumbnail}
@@ -234,22 +235,43 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
 
                       <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 text-[11px] text-stone-400">
                         <div className="flex items-center gap-2.5 font-mono text-[10px] text-stone-500">
-                          <span className="inline-flex items-center gap-1" title="Views">
-                            <Eye className="w-3 h-3 text-[#064E3B]" />
-                            <span>{(sp.views_count ?? 0).toLocaleString()}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1" title="Likes">
-                            <Heart className="w-3 h-3 text-rose-500" />
-                            <span>{(sp.likes_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="speech"
+                            itemId={sp.id}
+                            itemTitle={sp.title}
+                            tab="views"
+                            count={sp.views_count ?? 0}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-[#064E3B]"
+                            icon={<Eye className="w-3 h-3 text-[#064E3B]" />}
+                          />
+                          <StatActivityButton
+                            itemType="speech"
+                            itemId={sp.id}
+                            itemTitle={sp.title}
+                            tab="likes"
+                            count={sp.likes_count ?? 0}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-rose-600"
+                            icon={<Heart className="w-3 h-3 text-rose-500" />}
+                          />
                           <span className="inline-flex items-center gap-1" title="Comments">
                             <MessageSquare className="w-3 h-3 text-emerald-700" />
                             <span>{(sp.comments_count ?? 0).toLocaleString()}</span>
                           </span>
-                          <span className="inline-flex items-center gap-1" title="Shares">
-                            <Share2 className="w-3 h-3 text-sky-600" />
-                            <span>{(sp.shares_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="speech"
+                            itemId={sp.id}
+                            itemTitle={sp.title}
+                            tab="shares"
+                            count={sp.shares_count ?? 0}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-sky-700"
+                            icon={<Share2 className="w-3 h-3 text-sky-600" />}
+                          />
                         </div>
                         <span className="flex items-center gap-1 shrink-0">
                           <Clock className="w-3 h-3" />
@@ -283,52 +305,78 @@ export const ScholarProfilePage: React.FC<ScholarProfilePageProps> = ({
                   <div
                     key={reel.id}
                     onClick={() => onPlayReel(reel)}
-                    className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-stone-200 hover:border-[#D4AF37] hover:shadow-lg transition-all"
+                    className="relative aspect-9/16 bg-stone-900 rounded-xl cursor-pointer group border border-stone-200 hover:border-[#D4AF37] hover:shadow-lg hover:z-30 transition-all"
                   >
-                    {cardThumb ? (
-                      <img
-                        src={cardThumb}
-                        alt={reel.title}
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                        }}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-[#064E3B]/80 flex items-center justify-center">
-                        <Film className="w-8 h-8 text-white/50" />
-                      </div>
-                    )}
+                    <div className="absolute inset-0 rounded-xl overflow-hidden">
+                      {cardThumb ? (
+                        <img
+                          src={cardThumb}
+                          alt={reel.title}
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#064E3B]/80 flex items-center justify-center">
+                          <Film className="w-8 h-8 text-white/50" />
+                        </div>
+                      )}
+                    </div>
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-3">
+                    <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-3">
                       <h4 className="text-xs font-bold text-white line-clamp-2 leading-tight">
                         {reel.title}
                       </h4>
                       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-stone-200 mt-1.5 font-mono">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-0.5" title="Views">
-                            <Eye className="w-3 h-3 text-[#D4AF37]" />
-                            <span>{(reel.views_count ?? 0).toLocaleString()}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-0.5" title="Likes">
-                            <Heart className="w-3 h-3 text-rose-400" />
-                            <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="views"
+                            count={reel.views_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-[#D4AF37]"
+                            icon={<Eye className="w-3 h-3 text-[#D4AF37]" />}
+                          />
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="likes"
+                            count={reel.likes_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="left"
+                            popoverDirection="up"
+                            className="hover:text-rose-300"
+                            icon={<Heart className="w-3 h-3 text-rose-400" />}
+                          />
                           <span className="inline-flex items-center gap-0.5" title="Comments">
                             <MessageSquare className="w-3 h-3 text-emerald-300" />
                             <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
                           </span>
-                          <span className="inline-flex items-center gap-0.5" title="Shares">
-                            <Share2 className="w-3 h-3 text-sky-300" />
-                            <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
-                          </span>
+                          <StatActivityButton
+                            itemType="reel"
+                            itemId={reel.id}
+                            itemTitle={reel.title}
+                            tab="shares"
+                            count={reel.shares_count ?? 0}
+                            darkSurface={true}
+                            popoverAlign="right"
+                            popoverDirection="up"
+                            className="hover:text-sky-200"
+                            icon={<Share2 className="w-3 h-3 text-sky-300" />}
+                          />
                         </div>
                         {reel.duration && <span>{reel.duration}</span>}
                       </div>
                     </div>
 
-                    <div className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-[#D4AF37] text-[#064E3B] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute inset-0 m-auto w-10 h-10 rounded-full bg-[#D4AF37] text-[#064E3B] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                       <Play className="w-4 h-4 ml-0.5 fill-[#064E3B]" />
                     </div>
                   </div>

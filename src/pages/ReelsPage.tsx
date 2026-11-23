@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Film, Play, Search, Eye, Heart, MessageSquare, Share2 } from 'lucide-react';
 import { Reel, Scholar } from '../types';
 import { getInstagramThumbUrl } from '../utils/media';
+import { StatActivityButton } from '../components/EngagementActivityModal';
 
 interface ReelsPageProps {
   reels: Reel[];
@@ -178,26 +179,28 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
               <div
                 key={reel.id}
                 onClick={() => onPlayReel(reel)}
-                className="relative aspect-9/16 bg-stone-900 rounded-xl overflow-hidden cursor-pointer group border border-white/10 hover:border-[#D4AF37]/80 hover:shadow-xl transition-all"
+                className="relative aspect-9/16 bg-stone-900 rounded-xl cursor-pointer group border border-white/10 hover:border-[#D4AF37]/80 hover:shadow-xl hover:z-30 transition-all"
               >
-                {cardThumb ? (
-                  <img
-                    src={cardThumb}
-                    alt={reel.title}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-[#064E3B]/80 flex items-center justify-center">
-                    <Film className="w-10 h-10 text-white/40" />
-                  </div>
-                )}
+                <div className="absolute inset-0 rounded-xl overflow-hidden">
+                  {cardThumb ? (
+                    <img
+                      src={cardThumb}
+                      alt={reel.title}
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#064E3B]/80 flex items-center justify-center">
+                      <Film className="w-10 h-10 text-white/40" />
+                    </div>
+                  )}
+                </div>
 
                 {/* Dark gradient scrim */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-between p-3.5">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-between p-3.5">
                   <div className="flex justify-between items-start">
                     <span className="w-2 h-2 rounded-full bg-[#D4AF37]" />
                     <span className="px-2 py-0.5 rounded bg-black/60 text-[10px] font-mono text-white/90">
@@ -215,28 +218,52 @@ export const ReelsPage: React.FC<ReelsPageProps> = ({
                       {reel.title}
                     </h4>
                     <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-stone-200 font-mono pt-1">
-                      <span className="inline-flex items-center gap-1" title="Views">
-                        <Eye className="w-3 h-3 text-[#D4AF37]" />
-                        <span>{(reel.views_count ?? 0).toLocaleString()}</span>
-                      </span>
-                      <span className="inline-flex items-center gap-1" title="Likes">
-                        <Heart className="w-3 h-3 text-rose-400" />
-                        <span>{(reel.likes_count ?? 0).toLocaleString()}</span>
-                      </span>
+                      <StatActivityButton
+                        itemType="reel"
+                        itemId={reel.id}
+                        itemTitle={reel.title}
+                        tab="views"
+                        count={reel.views_count ?? 0}
+                        darkSurface={true}
+                        popoverAlign="left"
+                        popoverDirection="up"
+                        className="hover:text-[#D4AF37]"
+                        icon={<Eye className="w-3 h-3 text-[#D4AF37]" />}
+                      />
+                      <StatActivityButton
+                        itemType="reel"
+                        itemId={reel.id}
+                        itemTitle={reel.title}
+                        tab="likes"
+                        count={reel.likes_count ?? 0}
+                        darkSurface={true}
+                        popoverAlign="left"
+                        popoverDirection="up"
+                        className="hover:text-rose-300"
+                        icon={<Heart className="w-3 h-3 text-rose-400" />}
+                      />
                       <span className="inline-flex items-center gap-1" title="Comments">
                         <MessageSquare className="w-3 h-3 text-emerald-300" />
                         <span>{(reel.comments_count ?? 0).toLocaleString()}</span>
                       </span>
-                      <span className="inline-flex items-center gap-1" title="Shares">
-                        <Share2 className="w-3 h-3 text-sky-300" />
-                        <span>{(reel.shares_count ?? 0).toLocaleString()}</span>
-                      </span>
+                      <StatActivityButton
+                        itemType="reel"
+                        itemId={reel.id}
+                        itemTitle={reel.title}
+                        tab="shares"
+                        count={reel.shares_count ?? 0}
+                        darkSurface={true}
+                        popoverAlign="right"
+                        popoverDirection="up"
+                        className="hover:text-sky-200"
+                        icon={<Share2 className="w-3 h-3 text-sky-300" />}
+                      />
                     </div>
                   </div>
                 </div>
 
                 {/* Hover Play Button */}
-                <div className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-[#D4AF37] text-[#064E3B] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-xl">
+                <div className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-[#D4AF37] text-[#064E3B] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-xl pointer-events-none">
                   <Play className="w-5 h-5 ml-0.5 fill-[#064E3B]" />
                 </div>
               </div>

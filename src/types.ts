@@ -286,3 +286,31 @@ export interface ViewersResponse {
   };
 }
 
+export type ActivityTabType = 'views' | 'likes' | 'shares' | 'saves';
+
+export interface ActivityPerson {
+  id: string;
+  user_id: string | null;
+  name: string;
+  handle: string;
+  email: string | null;
+  viewer_type: 'admin' | 'member' | 'guest';
+  device_info: string | null;
+  platform: string | null;
+  created_at: string;
+}
+
+export interface ItemActivityResponse {
+  views: ActivityPerson[];
+  likes: ActivityPerson[];
+  shares: ActivityPerson[];
+  saves: ActivityPerson[];
+  counts: {
+    views: number;
+    likes: number;
+    shares: number;
+    saves: number;
+  };
+}
+
+

@@ -80,9 +80,16 @@ export function getInstagramEmbedUrl(url: string | null | undefined): string | n
   return extractInstagramInfo(url)?.embedUrl || null;
 }
 
-export function getInstagramStreamUrl(url: string | null | undefined): string | null {
+export function getInstagramStreamUrl(
+  url: string | null | undefined,
+  refresh = false,
+  cacheBust?: number
+): string | null {
   if (!url || !isInstagramUrl(url)) return null;
-  return `/api/instagram/stream?url=${encodeURIComponent(url.trim())}`;
+  let streamUrl = `/api/instagram/stream?url=${encodeURIComponent(url.trim())}`;
+  if (refresh) streamUrl += '&refresh=1';
+  if (cacheBust) streamUrl += `&t=${cacheBust}`;
+  return streamUrl;
 }
 
 export function getInstagramThumbUrl(url: string | null | undefined): string | null {

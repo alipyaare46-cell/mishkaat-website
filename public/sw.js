@@ -1,5 +1,5 @@
 // MISHKAAT Platform Service Worker with Instant Auto-Update Architecture
-const CACHE_VERSION = 'mishkaat-v2.9-20261119';
+const CACHE_VERSION = 'mishkaat-v3.0-20261123';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',

@@ -517,7 +517,7 @@ export const AdminBooks: React.FC<AdminBooksProps> = ({
 
                 {/* Uploaded PDF info banner */}
                 {fileUrl && !isUploadingPdf && (
-                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs text-emerald-800 flex items-center justify-between">
+                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs text-emerald-800 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 truncate">
                       <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span className="font-semibold truncate">
@@ -525,14 +525,41 @@ export const AdminBooks: React.FC<AdminBooksProps> = ({
                       </span>
                       {uploadedPdfSize && <span className="text-[10px] text-emerald-600">({uploadedPdfSize})</span>}
                     </div>
-                    <a
-                      href={fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-emerald-700 hover:underline shrink-0"
-                    >
-                      Preview PDF ↗
-                    </a>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onViewBook({
+                            id: editingBook?.id || 'preview',
+                            title: title || 'Kitab Preview',
+                            author_name: authorName || 'Scholar',
+                            category_id: categoryId,
+                            category_name: categories.find((c) => c.id === categoryId)?.name,
+                            cover_image: coverImage || null,
+                            description,
+                            language,
+                            file_url: fileUrl,
+                            external_read_url: externalReadUrl || null,
+                            publication_details: publicationDetails,
+                            allow_download: allowDownload ? 1 : 0,
+                            is_published: isPublished ? 1 : 0,
+                            created_at: editingBook?.created_at || new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                          })
+                        }
+                        className="text-[11px] font-bold text-[#064E3B] hover:underline cursor-pointer"
+                      >
+                        Open in Reader
+                      </button>
+                      <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-bold text-emerald-700 hover:underline"
+                      >
+                        Preview File ↗
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
@@ -629,10 +656,18 @@ export const AdminBooks: React.FC<AdminBooksProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isUploadingPdf || isUploadingCover}
                   className="px-5 py-2 font-bold text-white bg-[#064E3B] hover:bg-[#075c46] rounded-lg cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Saving...' : editingBook ? 'Update Book' : 'Publish Book'}
+                  {isUploadingPdf
+                    ? 'Uploading PDF...'
+                    : isUploadingCover
+                      ? 'Uploading Cover...'
+                      : isSubmitting
+                        ? 'Saving...'
+                        : editingBook
+                          ? 'Update Book'
+                          : 'Publish Book'}
                 </button>
               </div>
             </form>
