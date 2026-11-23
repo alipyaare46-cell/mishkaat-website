@@ -522,7 +522,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
                     setIgRetryNonce(Date.now());
                   }}
                   className="px-2 py-1 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold border border-emerald-500/40 flex items-center gap-1 transition-colors cursor-pointer"
-                  title="Direct Video Stream Dubara Chalayein"
+                  title="Retry direct video stream"
                 >
                   <RefreshCw className="w-3 h-3" />
                   <span>Retry</span>
@@ -633,8 +633,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
         </div>
 
-        {/* Video Player Area */}
-        <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
+        {/* Video Player Area (Sits cleanly above bottom controls dock) */}
+        <div className="relative w-full flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
           {isYouTube ? (
             <iframe
               ref={iframeRef}
@@ -720,79 +720,8 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
             </button>
           )}
 
-          {/* Bottom Information Overlay + Always-Reachable Seek & Prev/Next Reel Controls */}
-          <div className="absolute bottom-0 left-0 right-14 z-20 p-4 pt-12 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-2 pointer-events-auto">
-            {/* Native/Instagram Video Timeline Scrubber */}
-            {!isYouTube && !isInstagramFallbackEmbed && videoDuration > 0 && (
-              <div className="flex items-center gap-2 text-[10px] font-mono text-stone-200">
-                <span className="tabular-nums shrink-0">{formatVideoTime(videoCurrentTime)}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={videoDuration}
-                  step={0.1}
-                  value={Math.min(videoCurrentTime, videoDuration)}
-                  onChange={(e) => {
-                    const nextTime = Number(e.target.value);
-                    setVideoCurrentTime(nextTime);
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = nextTime;
-                    }
-                  }}
-                  aria-label="Seek video timeline"
-                  className="flex-1 h-1.5 accent-[#D4AF37] bg-white/25 rounded-lg cursor-pointer"
-                />
-                <span className="tabular-nums shrink-0">{formatVideoTime(videoDuration)}</span>
-              </div>
-            )}
-
-            {/* Playback & Prev/Next Reel Controls Strip (Visible on Mobile & Desktop) */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {canGoPrev && (
-                <button
-                  type="button"
-                  onClick={goToPrevReel}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
-                  title="Pichli Reel (Previous)"
-                >
-                  <ChevronUp className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>Piche</span>
-                </button>
-              )}
-              {canGoNext && (
-                <button
-                  type="button"
-                  onClick={goToNextReel}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
-                  title="Agli Reel (Next)"
-                >
-                  <ChevronDown className="w-3.5 h-3.5 text-[#D4AF37]" />
-                  <span>Aage</span>
-                </button>
-              )}
-              {!isInstagramFallbackEmbed && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => skipTime(-10)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-mono font-bold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
-                    title="Rewind 10 seconds (-10s)"
-                  >
-                    <RotateCcw className="w-3 h-3 text-[#D4AF37]" />
-                    <span>-10s</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => skipTime(10)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/65 hover:bg-white/20 text-white text-[11px] font-mono font-bold border border-white/20 backdrop-blur-xs cursor-pointer transition-colors"
-                    title="Forward 10 seconds (+10s)"
-                  >
-                    <RotateCw className="w-3 h-3 text-[#D4AF37]" />
-                    <span>+10s</span>
-                  </button>
-                </>
-              )}
-            </div>
+          {/* Bottom Information Overlay with subtle scrim */}
+          <div className="absolute bottom-0 left-0 right-14 z-20 p-3.5 pt-8 bg-gradient-to-t from-black/90 via-black/45 to-transparent space-y-1 pointer-events-auto">
 
             {/* Scholar Link */}
             {currentReel.scholar_name && (
@@ -840,7 +769,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
 
           {/* RIGHT-SIDE ACTION RAIL (Instagram-style: Hover or click counts to see User IDs!) */}
-          <div className="absolute right-2.5 bottom-16 z-30 flex flex-col items-center gap-3 pointer-events-auto">
+          <div className="absolute right-2.5 bottom-4 z-30 flex flex-col items-center gap-3 pointer-events-auto">
             {/* Views Counter with Instagram-style Hover/Click User ID List */}
             <div className="flex flex-col items-center">
               <StatActivityButton
@@ -1002,6 +931,93 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
           </div>
         </div>
 
+        {/* Dedicated Bottom Controls Dock BELOW Video (Never blocks video view!) */}
+        <div className="w-full shrink-0 bg-stone-950/95 border-t border-white/10 px-3.5 py-2.5 space-y-2 z-30">
+          {/* Native/Instagram Video Timeline Scrubber */}
+          {!isYouTube && !isInstagramFallbackEmbed && videoDuration > 0 && (
+            <div className="flex items-center gap-2 text-[10px] font-mono text-stone-300">
+              <span className="tabular-nums shrink-0">{formatVideoTime(videoCurrentTime)}</span>
+              <input
+                type="range"
+                min={0}
+                max={videoDuration}
+                step={0.1}
+                value={Math.min(videoCurrentTime, videoDuration)}
+                onChange={(e) => {
+                  const nextTime = Number(e.target.value);
+                  setVideoCurrentTime(nextTime);
+                  if (videoRef.current) {
+                    videoRef.current.currentTime = nextTime;
+                  }
+                }}
+                aria-label="Seek video timeline"
+                className="flex-1 h-1.5 accent-[#D4AF37] bg-white/20 rounded-lg cursor-pointer"
+              />
+              <span className="tabular-nums shrink-0">{formatVideoTime(videoDuration)}</span>
+            </div>
+          )}
+
+          {/* Previous / Next Reel & Seek Controls Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={goToPrevReel}
+                disabled={!canGoPrev}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-semibold border border-white/15 cursor-pointer transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
+                title="Previous Reel"
+              >
+                <ChevronUp className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>Previous</span>
+              </button>
+              <button
+                type="button"
+                onClick={goToNextReel}
+                disabled={!canGoNext}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-semibold border border-white/15 cursor-pointer transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
+                title="Next Reel"
+              >
+                <ChevronDown className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>Next</span>
+              </button>
+            </div>
+
+            {!isInstagramFallbackEmbed && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => skipTime(-10)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-mono font-bold border border-white/15 cursor-pointer transition-colors"
+                  title="Rewind 10 seconds"
+                >
+                  <RotateCcw className="w-3 h-3 text-[#D4AF37]" />
+                  <span>-10s</span>
+                </button>
+                {!isYouTube && (
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="inline-flex items-center justify-center p-1.5 rounded-lg bg-[#064E3B] hover:bg-[#075c46] text-white border border-emerald-500/40 cursor-pointer transition-colors"
+                    title={isPlaying ? 'Pause' : 'Play'}
+                    aria-label={isPlaying ? 'Pause video' : 'Play video'}
+                  >
+                    {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => skipTime(10)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-mono font-bold border border-white/15 cursor-pointer transition-colors"
+                  title="Forward 10 seconds"
+                >
+                  <RotateCw className="w-3 h-3 text-[#D4AF37]" />
+                  <span>+10s</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Slide-over Comments Sheet */}
         {isCommentsOpen && (
           <CommentsSection
@@ -1029,7 +1045,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
         )}
       </div>
 
-      {/* Desktop Prev / Next Reel Arrows placed cleanly OUTSIDE containerRef so overflow-hidden never clips them */}
+      {/* Desktop Previous / Next Reel Arrows placed cleanly OUTSIDE containerRef so overflow-hidden never clips them */}
       <div className="hidden sm:flex flex-col gap-3 ml-3 z-40">
         {canGoPrev && (
           <button
@@ -1039,7 +1055,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               goToPrevReel();
             }}
             className="w-11 h-11 rounded-full bg-white/15 hover:bg-[#D4AF37] hover:text-stone-950 text-white flex items-center justify-center transition-all cursor-pointer shadow-xl border border-white/20 backdrop-blur-md"
-            title="Pichli Reel (Previous Reel)"
+            title="Previous Reel"
           >
             <ChevronUp className="w-6 h-6" />
           </button>
@@ -1052,7 +1068,7 @@ export const ReelPlayerModal: React.FC<ReelPlayerModalProps> = ({
               goToNextReel();
             }}
             className="w-11 h-11 rounded-full bg-white/15 hover:bg-[#D4AF37] hover:text-stone-950 text-white flex items-center justify-center transition-all cursor-pointer shadow-xl border border-white/20 backdrop-blur-md"
-            title="Agli Reel (Next Reel)"
+            title="Next Reel"
           >
             <ChevronDown className="w-6 h-6" />
           </button>
